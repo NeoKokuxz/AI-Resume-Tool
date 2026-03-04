@@ -1,0 +1,437 @@
+AI Job Application Automation System — Architecture & MVP
+Overview
+
+Build an AI-powered system that:
+
+Collects job postings
+
+Scores jobs against the user’s resume
+
+Generates tailored resumes
+
+Applies automatically
+
+Tracks application status
+
+Monitors email inbox for interview invitations and updates pipeline
+
+System Architecture
+High-Level Architecture
+                ┌──────────────────────┐
+                │   Job Sources        │
+                │ LinkedIn / Indeed    │
+                │ Company Career Pages │
+                └─────────┬────────────┘
+                          │
+                          ▼
+                ┌──────────────────────┐
+                │ Job Ingestion Service │
+                │ Scraper / APIs        │
+                └─────────┬────────────┘
+                          │
+                          ▼
+                ┌──────────────────────┐
+                │ Job Matching Engine   │
+                │ ATS Score + LLM       │
+                └─────────┬────────────┘
+                          │
+                          ▼
+                ┌──────────────────────┐
+                │ Resume Generator      │
+                │ Tailored Resume       │
+                └─────────┬────────────┘
+                          │
+                          ▼
+                ┌──────────────────────┐
+                │ Auto Apply Agent      │
+                │ Form Filling / Bot    │
+                └─────────┬────────────┘
+                          │
+                          ▼
+                ┌──────────────────────┐
+                │ Application Tracker   │
+                │ Status Pipeline       │
+                └─────────┬────────────┘
+                          │
+                          ▼
+                ┌──────────────────────┐
+                │ Email Monitor        │
+                │ Gmail / Outlook API  │
+                └─────────┬────────────┘
+                          │
+                          ▼
+                ┌──────────────────────┐
+                │ Dashboard             │
+                │ React + Analytics     │
+                └──────────────────────┘
+Core Components
+1. Job Ingestion Service
+
+Fetch job postings.
+
+Sources
+
+LinkedIn
+
+Indeed
+
+Company career pages
+
+Responsibilities
+
+Scrape or API integration
+
+Normalize job descriptions
+
+Store jobs in database
+
+Output
+job {
+  id
+  company
+  title
+  description
+  location
+  url
+  posted_date
+}
+2. Job Matching Engine
+
+Compare job description with resume.
+
+Process
+
+Extract keywords
+
+Compare with resume
+
+Generate ATS score
+
+Rank jobs
+
+ATS Score Formula
+score =
+  keyword_match * 0.5 +
+  experience_match * 0.3 +
+  title_similarity * 0.2
+3. Resume Tailoring Engine
+
+Generate job-specific resumes.
+
+Input
+
+Base resume
+
+Job description
+
+Output
+tailored_resume
+cover_letter
+ats_score
+Example Prompt
+Optimize this resume for the job description.
+Ensure ATS compatibility.
+Preserve factual information.
+Add keywords from the job description.
+4. Auto Apply Agent
+
+Automate job applications.
+
+Capabilities
+
+Autofill forms
+
+Upload resume
+
+Submit application
+
+Implementation
+
+Use:
+
+Playwright
+or
+
+Puppeteer
+
+Workflow
+Open job URL
+Fill application form
+Upload tailored resume
+Submit
+Store result
+5. Email Monitoring Service
+
+Detect job application updates.
+
+Integration
+
+Gmail API
+
+Outlook API
+
+Classifier
+
+Detect email type:
+
+Interview invite
+
+Online assessment
+
+Rejection
+
+Recruiter outreach
+
+Example NLP Rules
+if contains "schedule interview":
+    status = interview
+
+if contains "assessment":
+    status = test_stage
+
+if contains "unfortunately":
+    status = rejected
+6. Application Tracking System
+
+Pipeline stages:
+
+Saved
+Applied
+ATS Passed
+Recruiter Contact
+Interview
+Offer
+Rejected
+Database Schema
+Tables
+Jobs
+jobs
+- id
+- title
+- company
+- description
+- location
+- url
+- created_at
+Applications
+applications
+- id
+- job_id
+- resume_id
+- status
+- ats_score
+- applied_at
+Resumes
+resumes
+- id
+- job_id
+- version
+- content
+- created_at
+Emails
+emails
+- id
+- subject
+- sender
+- classification
+- related_job_id
+Recommended Tech Stack
+Frontend
+
+React
+
+TypeScript
+
+Tailwind
+
+Next.js
+
+Backend
+
+FastAPI
+or
+
+Node.js (NestJS)
+
+AI
+
+LLM for resume optimization
+
+Embedding model for job matching
+
+Automation
+
+Playwright
+
+Database
+
+PostgreSQL
+
+Queue
+
+Redis
+
+Celery / BullMQ
+
+Hosting
+
+AWS
+or
+
+Vercel + Supabase
+
+MVP Version (Build This First)
+
+Goal: Working system in ~10 days
+
+MVP features:
+
+Import job descriptions manually
+
+ATS scoring
+
+Resume optimization
+
+Email monitoring
+
+Application tracker
+
+No scraping initially.
+
+MVP Architecture
+User → Dashboard
+         ↓
+   Upload Resume
+         ↓
+   Paste Job Description
+         ↓
+   ATS Score Engine
+         ↓
+   Generate Tailored Resume
+         ↓
+   Save Application
+         ↓
+   Monitor Email Inbox
+         ↓
+   Update Status
+MVP Folder Structure
+job-agent/
+  backend/
+    api/
+    services/
+    models/
+    workers/
+  frontend/
+    dashboard/
+    components/
+  ai/
+    prompts/
+  scripts/
+MVP API Design
+Upload Resume
+POST /resume
+Analyze Job
+POST /job/analyze
+Generate Resume
+POST /resume/generate
+Track Application
+POST /applications
+Email Webhook
+POST /email/incoming
+MVP Build Plan
+Day 1–2
+
+Backend skeleton
+
+FastAPI
+
+Database
+
+Auth
+
+Day 3
+
+Resume parser
+ATS scoring
+
+Day 4
+
+LLM resume generator
+
+Day 5
+
+Dashboard UI
+
+Day 6
+
+Application tracking
+
+Day 7
+
+Email monitoring
+
+Day 8–10
+
+Testing
+Deployment
+
+Future Advanced Features
+Fully Autonomous AI Agent
+
+The system could:
+
+Find jobs automatically
+
+Apply
+
+Track responses
+
+Prepare interviews
+
+AI Interview Preparation
+
+Generate:
+
+Interview questions
+
+Company research
+
+Mock interview
+
+Multi-Agent System
+
+Agents:
+
+Job Finder Agent
+
+Resume Optimizer Agent
+
+Application Agent
+
+Email Agent
+
+Claude Prompt to Build This
+
+Use this prompt:
+
+You are a senior software architect.
+
+Build a full-stack application called AI Job Agent.
+
+Requirements:
+- FastAPI backend
+- Next.js frontend
+- PostgreSQL database
+- Resume ATS scoring
+- Job description analyzer
+- Resume tailoring using LLM
+- Email monitoring via Gmail API
+- Application tracking pipeline
+
+Generate:
+1. Backend code
+2. Database models
+3. API routes
+4. Frontend dashboard
+5. AI prompts
+6. Deployment instructions
