@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AI Resume Tool</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 360px;
+      min-height: 480px;
+      background: #0f0f0f;
+      color: #e5e7eb;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+    }
+
+    /* Header */
+    .header {
+      padding: 16px 16px 0;
+      border-bottom: 1px solid #1f2937;
+    }
+    .header h1 { font-size: 15px; font-weight: 700; color: #f9fafb; }
+    .header p  { font-size: 12px; color: #6b7280; margin-top: 2px; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; margin-top: 12px; }
+    .tab {
+      padding: 6px 14px;
+      border: none;
+      border-radius: 6px 6px 0 0;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      background: transparent;
+      color: #6b7280;
+      transition: all 0.15s;
+    }
+    .tab.active { background: #111827; color: #e5e7eb; }
+
+    /* Panels */
+    .panel { display: none; padding: 16px; background: #111827; }
+    .panel.active { display: block; }
+
+    .hint { font-size: 12px; color: #9ca3af; margin-bottom: 14px; line-height: 1.5; }
+
+    /* Buttons */
+    .btn {
+      width: 100%;
+      padding: 9px 14px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      background: #1f2937;
+      color: #e5e7eb;
+      transition: all 0.15s;
+    }
+    .btn:disabled { background: #374151; color: #6b7280; cursor: not-allowed; }
+    .btn.primary  { background: #4f46e5; }
+    .btn.primary:hover:not(:disabled) { background: #4338ca; }
+    .btn:hover:not(:disabled):not(.primary) { background: #374151; }
+
+    /* Form */
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 500;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 8px 10px;
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #e5e7eb;
+      outline: none;
+      font-family: inherit;
+    }
+    input:focus, textarea:focus { border-color: #4f46e5; }
+    .field { margin-bottom: 10px; }
+
+    /* Job card */
+    .job-card {
+      margin-top: 12px;
+      padding: 12px;
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 8px;
+    }
+    .job-title  { font-size: 13px; font-weight: 600; color: #f9fafb; }
+    .job-meta   { font-size: 12px; color: #9ca3af; margin-top: 3px; }
+
+    /* Status messages */
+    .msg {
+      margin-top: 10px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .msg.error   { background: #450a0a; border: 1px solid #7f1d1d; color: #fca5a5; }
+    .msg.success { background: #052e16; border: 1px solid #14532d; color: #86efac; }
+    .msg.info    { background: #1e1b4b; border: 1px solid #3730a3; color: #a5b4fc; }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <h1>AI Resume Tool</h1>
+    <p>Save jobs to your tracker</p>
+    <div class="tabs">
+      <button class="tab active" data-tab="scan">Auto Scan</button>
+      <button class="tab"        data-tab="manual">Manual</button>
+    </div>
+  </div>
+
+  <!-- Auto Scan Panel -->
+  <div class="panel active" id="panel-scan">
+    <p class="hint">Navigate to a LinkedIn job listing, then click Scan Page.</p>
+    <button class="btn" id="btn-scan">Scan Page</button>
+    <div id="scan-result"></div>
+  </div>
+
+  <!-- Manual Panel -->
+  <div class="panel" id="panel-manual">
+    <p class="hint">Paste a job description to send it to the web app.</p>
+    <div class="field">
+      <label>Job Title <span style="color:#6b7280">(optional)</span></label>
+      <input type="text" id="manual-title" placeholder="Auto-detected by AI" />
+    </div>
+    <div class="field">
+      <label>Company <span style="color:#6b7280">(optional)</span></label>
+      <input type="text" id="manual-company" placeholder="Auto-detected by AI" />
+    </div>
+    <div class="field">
+      <label>Job Description <span style="color:#f87171">*</span></label>
+      <textarea id="manual-desc" rows="8" placeholder="Paste the full job description here..."></textarea>
+    </div>
+    <button class="btn primary" id="btn-manual-send" disabled>Send to App</button>
+    <div id="manual-result"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
