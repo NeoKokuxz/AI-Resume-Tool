@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -187,6 +187,34 @@ export default function JobsPage() {
     useAppStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [importBanner, setImportBanner] = useState<string | null>(null);
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/jobs/import");
+        const data = await res.json();
+        if (data.jobs && data.jobs.length > 0) {
+          for (const job of data.jobs) {
+            addJob({
+              title: job.title || "Software Engineer",
+              company: job.company || "Unknown Company",
+              description: job.description || "",
+              location: job.location || "Remote",
+              url: job.url,
+            });
+          }
+          setImportBanner(
+            `${data.jobs.length} job${data.jobs.length > 1 ? "s" : ""} imported from extension`
+          );
+          setTimeout(() => setImportBanner(null), 4000);
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [addJob]);
 
   // Form state
   const [title, setTitle] = useState("");
@@ -268,6 +296,12 @@ export default function JobsPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
+      {importBanner && (
+        <div className="mb-4 px-4 py-2.5 bg-indigo-950/60 border border-indigo-700/50 rounded-lg text-sm text-indigo-300 flex items-center gap-2">
+          <Zap size={14} />
+          {importBanner}
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Job Listings</h1>
