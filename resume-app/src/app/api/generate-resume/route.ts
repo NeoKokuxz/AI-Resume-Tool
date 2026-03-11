@@ -3,6 +3,16 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic();
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { baseResume, jobDescription, jobTitle, company } = await request.json();
@@ -79,12 +89,12 @@ Return ONLY the cover letter text. No subject line needed.`;
         ? coverLetterResponse.content[0].text
         : "";
 
-    return NextResponse.json({ tailoredResume, coverLetter });
+    return NextResponse.json({ tailoredResume, coverLetter }, { headers: corsHeaders });
   } catch (error) {
     console.error("Error generating resume:", error);
     return NextResponse.json(
       { error: "Failed to generate tailored resume" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }

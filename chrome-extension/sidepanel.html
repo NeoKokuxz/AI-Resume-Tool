@@ -17,6 +17,7 @@
     body {
       display: flex;
       flex-direction: column;
+      position: relative;
     }
 
     /* Header */
@@ -298,6 +299,82 @@
     }
     .collapsible-body.open { display: block; }
 
+    /* Gear button */
+    .btn-gear {
+      background: none;
+      border: none;
+      color: #6b7280;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      transition: color 0.15s, background 0.15s;
+    }
+    .btn-gear:hover { color: #e5e7eb; background: #1f2937; }
+    .btn-gear.active { color: #a5b4fc; }
+
+    /* Settings overlay */
+    .settings-overlay {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: #111827;
+      z-index: 100;
+      flex-direction: column;
+    }
+    .settings-overlay.open { display: flex; }
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 16px 12px;
+      border-bottom: 1px solid #1f2937;
+      flex-shrink: 0;
+    }
+    .settings-header h2 { font-size: 14px; font-weight: 600; color: #f9fafb; }
+    .btn-close-settings {
+      background: none; border: none; color: #6b7280;
+      cursor: pointer; padding: 4px; border-radius: 6px;
+      display: flex; align-items: center; transition: color 0.15s;
+    }
+    .btn-close-settings:hover { color: #e5e7eb; }
+    .settings-body { flex: 1; overflow-y: auto; padding: 12px 16px 16px; }
+
+    /* Settings */
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 13px 0;
+      border-bottom: 1px solid #1f2937;
+    }
+    .setting-row:last-child { border-bottom: none; }
+    .setting-label { font-size: 13px; font-weight: 500; color: #e5e7eb; }
+    .setting-desc  { font-size: 11px; color: #6b7280; margin-top: 2px; }
+    .setting-section-title {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #4f46e5;
+      margin-bottom: 4px;
+    }
+    .toggle-wrap { position: relative; display: inline-block; width: 38px; height: 22px; flex-shrink: 0; }
+    .toggle-wrap input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: #374151; border-radius: 22px; transition: 0.2s;
+    }
+    .toggle-slider:before {
+      position: absolute; content: "";
+      height: 16px; width: 16px; left: 3px; bottom: 3px;
+      background: #9ca3af; border-radius: 50%; transition: 0.2s;
+    }
+    .toggle-wrap input:checked + .toggle-slider { background: #4f46e5; }
+    .toggle-wrap input:checked + .toggle-slider:before { transform: translateX(16px); background: #fff; }
+
     /* Fill results */
     .fill-result-item {
       display: flex;
@@ -312,10 +389,69 @@
   </style>
 </head>
 <body>
+  <!-- Settings Overlay -->
+  <div class="settings-overlay" id="settings-overlay">
+    <div class="settings-header">
+      <h2>Settings</h2>
+      <button class="btn-close-settings" id="btn-close-settings" aria-label="Close settings">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 4L4 12M4 4l8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="settings-body">
+      <div class="setting-section-title" style="margin-bottom:8px">Automation</div>
+      <p class="hint" style="margin-bottom:12px">Steps chain in order when enabled. Only click Scan to trigger the full flow.</p>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">1 · Auto Proceed After Scan</div>
+          <div class="setting-desc">Jump to Apply step as soon as scan completes</div>
+        </div>
+        <label class="toggle-wrap">
+          <input type="checkbox" id="toggle-autoScan">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">2 · Auto Click Apply</div>
+          <div class="setting-desc">Automatically click the LinkedIn Apply button</div>
+        </div>
+        <label class="toggle-wrap">
+          <input type="checkbox" id="toggle-autoApply">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">3 · Auto Fill Fields</div>
+          <div class="setting-desc">Automatically fill the application form after it opens</div>
+        </div>
+        <label class="toggle-wrap">
+          <input type="checkbox" id="toggle-autoFill">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+  </div>
+
   <!-- Header -->
   <div class="header">
-    <h1>AI Resume Tool</h1>
-    <p>Save jobs to your tracker</p>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between">
+      <div>
+        <h1>AI Resume Tool</h1>
+        <p>Save jobs to your tracker</p>
+      </div>
+      <button class="btn-gear" id="btn-gear" aria-label="Open settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke="currentColor" stroke-width="1.5"/>
+        </svg>
+      </button>
+    </div>
     <div class="tabs">
       <button class="tab active" data-tab="scan">Auto Scan</button>
       <button class="tab"        data-tab="manual">Manual</button>
@@ -362,8 +498,9 @@
 
     <!-- Step 3: Auto Apply -->
     <div class="step-content" id="step-3-content">
-      <p class="hint">Click <strong style="color:#e5e7eb">Easy Apply</strong> on LinkedIn to open the form, then click Fill Fields below.</p>
-      <button class="btn primary" id="btn-fill">Fill Fields</button>
+      <div id="resume-download"></div>
+      <p class="hint">Click <strong style="color:#e5e7eb">Apply</strong> to open the application page and auto-fill your details.</p>
+      <button class="btn primary" id="btn-fill">Apply</button>
       <div id="fill-result"></div>
       <div id="apply-actions"></div>
     </div>

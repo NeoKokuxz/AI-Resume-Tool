@@ -188,10 +188,15 @@ function DroppableColumn({
   };
 
   return (
-    <div className="flex-shrink-0 w-64">
+    <div
+      className={cn(
+        "flex-shrink-0 w-64 flex flex-col h-full rounded-xl transition-all duration-150",
+        isOver ? "bg-indigo-950/20 ring-2 ring-indigo-600/50 ring-inset" : ""
+      )}
+    >
       <div
         className={cn(
-          "flex items-center justify-between mb-2 pb-2 border-b-2",
+          "flex items-center justify-between mx-2 mt-2 mb-2 pb-2 border-b-2 flex-shrink-0",
           headerColors[status]
         )}
       >
@@ -211,8 +216,8 @@ function DroppableColumn({
       <div
         ref={setNodeRef}
         className={cn(
-          "min-h-32 rounded-xl p-2 space-y-2 transition-colors",
-          isOver ? "bg-indigo-950/30 border border-indigo-700/50" : "bg-gray-900/30"
+          "flex-1 min-h-0 overflow-y-auto rounded-lg mx-2 mb-2 p-2 space-y-2 transition-colors",
+          isOver ? "bg-indigo-950/30" : "bg-gray-900/30"
         )}
       >
         {children}
@@ -297,8 +302,8 @@ export default function ApplicationsPage() {
   }, {} as Record<ApplicationStatus, Application[]>);
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="flex flex-col" style={{ height: '100vh' }}>
+      <div className="flex items-center justify-between px-6 pt-6 pb-4 flex-shrink-0">
         <div>
           <h1 className="text-2xl font-bold text-white">Application Pipeline</h1>
           <p className="text-sm text-gray-400 mt-1">
@@ -312,12 +317,14 @@ export default function ApplicationsPage() {
       </div>
 
       {applications.length === 0 ? (
-        <div className="card p-12 text-center max-w-md mx-auto">
-          <KanbanSquare size={32} className="text-gray-700 mx-auto mb-4" />
-          <p className="text-base font-medium text-gray-400 mb-1">No applications tracked</p>
-          <p className="text-sm text-gray-600">
-            Add jobs and click "Track Application" to start your pipeline
-          </p>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="card p-12 text-center max-w-md">
+            <KanbanSquare size={32} className="text-gray-700 mx-auto mb-4" />
+            <p className="text-base font-medium text-gray-400 mb-1">No applications tracked</p>
+            <p className="text-sm text-gray-600">
+              Add jobs and click "Track Application" to start your pipeline
+            </p>
+          </div>
         </div>
       ) : (
         <DndContext
@@ -325,27 +332,29 @@ export default function ApplicationsPage() {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex gap-4 overflow-x-auto pb-4">
-            {APPLICATION_STATUSES.map(({ value, label }) => (
-              <DroppableColumn
-                key={value}
-                status={value}
-                label={label}
-                count={groupedApplications[value].length}
-              >
-                {groupedApplications[value].map((app) => (
-                  <DraggableCard
-                    key={app.id}
-                    application={app}
-                    onDelete={() => deleteApplication(app.id)}
-                    onGenerateResume={() => handleGenerateResume(app)}
-                    isGenerating={generatingId === app.id}
-                    onViewResume={() => setViewingResume(app)}
-                    onUpdateNotes={(notes) => updateApplication(app.id, { notes })}
-                  />
-                ))}
-              </DroppableColumn>
-            ))}
+          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden px-6 pb-6">
+            <div className="flex gap-4 h-full">
+              {APPLICATION_STATUSES.map(({ value, label }) => (
+                <DroppableColumn
+                  key={value}
+                  status={value}
+                  label={label}
+                  count={groupedApplications[value].length}
+                >
+                  {groupedApplications[value].map((app) => (
+                    <DraggableCard
+                      key={app.id}
+                      application={app}
+                      onDelete={() => deleteApplication(app.id)}
+                      onGenerateResume={() => handleGenerateResume(app)}
+                      isGenerating={generatingId === app.id}
+                      onViewResume={() => setViewingResume(app)}
+                      onUpdateNotes={(notes) => updateApplication(app.id, { notes })}
+                    />
+                  ))}
+                </DroppableColumn>
+              ))}
+            </div>
           </div>
 
           <DragOverlay>
