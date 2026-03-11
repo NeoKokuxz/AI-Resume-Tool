@@ -6,19 +6,24 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    body {
-      width: 360px;
-      min-height: 480px;
+    html, body {
+      height: 100%;
       background: #0f0f0f;
       color: #e5e7eb;
       font-family: system-ui, -apple-system, sans-serif;
       font-size: 13px;
     }
 
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
     /* Header */
     .header {
       padding: 16px 16px 0;
       border-bottom: 1px solid #1f2937;
+      flex-shrink: 0;
     }
     .header h1 { font-size: 15px; font-weight: 700; color: #f9fafb; }
     .header p  { font-size: 12px; color: #6b7280; margin-top: 2px; }
@@ -39,7 +44,7 @@
     .tab.active { background: #111827; color: #e5e7eb; }
 
     /* Panels */
-    .panel { display: none; padding: 16px; background: #111827; }
+    .panel { display: none; padding: 16px; background: #111827; flex: 1; overflow-y: auto; }
     .panel.active { display: block; }
 
     .hint { font-size: 12px; color: #9ca3af; margin-bottom: 14px; line-height: 1.5; }
@@ -84,6 +89,7 @@
       font-family: inherit;
     }
     input:focus, textarea:focus { border-color: #4f46e5; }
+    textarea { resize: vertical; }
     .field { margin-bottom: 10px; }
 
     /* Job card */
@@ -94,8 +100,8 @@
       border: 1px solid #374151;
       border-radius: 8px;
     }
-    .job-title  { font-size: 13px; font-weight: 600; color: #f9fafb; }
-    .job-meta   { font-size: 12px; color: #9ca3af; margin-top: 3px; }
+    .job-title { font-size: 13px; font-weight: 600; color: #f9fafb; }
+    .job-meta  { font-size: 12px; color: #9ca3af; margin-top: 3px; }
 
     /* Status messages */
     .msg {
@@ -141,7 +147,7 @@
     </div>
     <div class="field">
       <label>Job Description <span style="color:#f87171">*</span></label>
-      <textarea id="manual-desc" rows="8" placeholder="Paste the full job description here..."></textarea>
+      <textarea id="manual-desc" rows="12" placeholder="Paste the full job description here..."></textarea>
     </div>
     <button class="btn primary" id="btn-manual-send" disabled>Send to App</button>
     <div id="manual-result"></div>

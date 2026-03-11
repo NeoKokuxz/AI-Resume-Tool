@@ -3,13 +3,16 @@
   "name": "AI Resume Tool",
   "version": "1.0.0",
   "description": "Save LinkedIn jobs to AI Resume Tool",
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "sidePanel"],
   "host_permissions": [
     "https://www.linkedin.com/*",
     "http://localhost:3000/*"
   ],
-  "action": {
-    "default_popup": "popup.html"
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "background": {
+    "service_worker": "background.js"
   },
   "icons": {
     "128": "icons/icon.png"
