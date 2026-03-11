@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -34,6 +34,17 @@ function extractSkills(content: string): string[] {
 export default function ResumePage() {
   const { baseResume, setBaseResume } = useAppStore();
   const [isDragging, setIsDragging] = useState(false);
+
+  // Sync resume from store to disk cache so the Chrome extension can access it
+  useEffect(() => {
+    if (baseResume) {
+      fetch('/api/resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: baseResume.content, fileName: baseResume.fileName }),
+      });
+    }
+  }, [baseResume]);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
