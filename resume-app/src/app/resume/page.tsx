@@ -50,6 +50,11 @@ export default function ResumePage() {
         uploadedAt: new Date().toISOString(),
       };
       setBaseResume(resume);
+      fetch('/api/resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: resume.content, fileName: resume.fileName }),
+      });
     };
     reader.readAsText(file);
   }
@@ -81,6 +86,11 @@ export default function ResumePage() {
       uploadedAt: new Date().toISOString(),
     };
     setBaseResume(resume);
+    fetch('/api/resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: resume.content, fileName: resume.fileName }),
+    });
     setIsEditing(false);
   }
 

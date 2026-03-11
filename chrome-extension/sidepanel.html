@@ -66,6 +66,23 @@
     .btn.primary  { background: #4f46e5; }
     .btn.primary:hover:not(:disabled) { background: #4338ca; }
     .btn:hover:not(:disabled):not(.primary) { background: #374151; }
+    .btn.scan {
+      background: linear-gradient(135deg, #4f46e5, #7c3aed);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 12px 14px;
+      border-radius: 10px;
+      letter-spacing: 0.01em;
+      box-shadow: 0 2px 12px rgba(79, 70, 229, 0.4);
+      transition: all 0.2s;
+    }
+    .btn.scan:hover:not(:disabled) {
+      background: linear-gradient(135deg, #4338ca, #6d28d9);
+      box-shadow: 0 4px 18px rgba(79, 70, 229, 0.55);
+      transform: translateY(-1px);
+    }
+    .btn.scan:active:not(:disabled) { transform: translateY(0); box-shadow: none; }
 
     /* Form */
     label {
@@ -102,6 +119,56 @@
     }
     .job-title { font-size: 13px; font-weight: 600; color: #f9fafb; }
     .job-meta  { font-size: 12px; color: #9ca3af; margin-top: 3px; }
+    .job-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+    .job-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-pay   { background: #064e3b; border: 1px solid #065f46; color: #6ee7b7; }
+    .badge-type  { background: #1e3a5f; border: 1px solid #1d4ed8; color: #93c5fd; }
+    .badge-place { background: #2d1b69; border: 1px solid #7c3aed; color: #c4b5fd; }
+    .job-section-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #6b7280;
+      margin-top: 10px;
+      margin-bottom: 5px;
+    }
+    .skill-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+    .skill-tag {
+      padding: 2px 7px;
+      background: #312e81;
+      border: 1px solid #4338ca;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #c7d2fe;
+    }
+    .job-desc-preview, .job-desc-full {
+      font-size: 11px;
+      color: #9ca3af;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+    .job-desc-full { max-height: 260px; }
+    .hidden { display: none; }
+    .btn-link {
+      background: none;
+      border: none;
+      color: #a5b4fc;
+      font-size: 11px;
+      cursor: pointer;
+      padding: 2px 0;
+      margin-top: 2px;
+    }
+    .btn-link:hover { text-decoration: underline; }
 
     /* Status messages */
     .msg {
@@ -114,6 +181,134 @@
     .msg.error   { background: #450a0a; border: 1px solid #7f1d1d; color: #fca5a5; }
     .msg.success { background: #052e16; border: 1px solid #14532d; color: #86efac; }
     .msg.info    { background: #1e1b4b; border: 1px solid #3730a3; color: #a5b4fc; }
+
+    /* Start over */
+    .start-over-bar {
+      display: none;
+      justify-content: flex-end;
+      padding: 0 16px 6px;
+    }
+    .start-over-bar.visible { display: flex; }
+    .btn-start-over {
+      background: none;
+      border: none;
+      color: #6b7280;
+      font-size: 11px;
+      cursor: pointer;
+      padding: 2px 0;
+    }
+    .btn-start-over:hover { color: #9ca3af; text-decoration: underline; }
+
+    /* Step indicator */
+    .step-indicator {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 16px 10px;
+      gap: 0;
+    }
+    .step-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .step-dot {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 2px solid #374151;
+      background: #1f2937;
+      color: #6b7280;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .step-dot.active  { border-color: #4f46e5; background: #4f46e5; color: #fff; }
+    .step-dot.done    { border-color: #16a34a; background: #16a34a; color: #fff; }
+    .step-label {
+      font-size: 10px;
+      color: #6b7280;
+      white-space: nowrap;
+    }
+    .step-label.active { color: #a5b4fc; }
+    .step-label.done   { color: #86efac; }
+    .step-line {
+      flex: 1;
+      height: 2px;
+      background: #374151;
+      margin: 0 4px;
+      margin-bottom: 14px;
+      min-width: 20px;
+      transition: background 0.2s;
+    }
+    .step-line.done { background: #16a34a; }
+
+    /* Step content sections */
+    .step-content { display: none; }
+    .step-content.active { display: block; }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #374151;
+      border-top-color: #4f46e5;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Collapsible */
+    .collapsible-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      padding: 8px 12px;
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 6px;
+      margin-top: 10px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #d1d5db;
+      user-select: none;
+    }
+    .collapsible-header:hover { background: #374151; }
+    .collapsible-body {
+      display: none;
+      padding: 10px 12px;
+      background: #111827;
+      border: 1px solid #374151;
+      border-top: none;
+      border-radius: 0 0 6px 6px;
+      font-size: 11px;
+      color: #9ca3af;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+      line-height: 1.5;
+    }
+    .collapsible-body.open { display: block; }
+
+    /* Fill results */
+    .fill-result-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 0;
+      font-size: 12px;
+    }
+    .fill-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .fill-dot.filled { background: #16a34a; }
+    .fill-dot.missed { background: #6b7280; }
   </style>
 </head>
 <body>
@@ -129,9 +324,50 @@
 
   <!-- Auto Scan Panel -->
   <div class="panel active" id="panel-scan">
-    <p class="hint">Navigate to a LinkedIn job listing, then click Scan Page.</p>
-    <button class="btn" id="btn-scan">Scan Page</button>
-    <div id="scan-result"></div>
+
+    <!-- Start Over -->
+    <div class="start-over-bar" id="start-over-bar">
+      <button class="btn-start-over" id="btn-start-over">↩ Start over</button>
+    </div>
+
+    <!-- Step Indicator -->
+    <div class="step-indicator" id="step-indicator">
+      <div class="step-item">
+        <div class="step-dot active" id="dot-1">1</div>
+        <div class="step-label active" id="label-1">Find Job</div>
+      </div>
+      <div class="step-line" id="line-1"></div>
+      <div class="step-item">
+        <div class="step-dot" id="dot-2">2</div>
+        <div class="step-label" id="label-2">Tailor</div>
+      </div>
+      <div class="step-line" id="line-2"></div>
+      <div class="step-item">
+        <div class="step-dot" id="dot-3">3</div>
+        <div class="step-label" id="label-3">Apply</div>
+      </div>
+    </div>
+
+    <!-- Step 1: Find Job -->
+    <div class="step-content active" id="step-1-content">
+      <p class="hint">Navigate to a LinkedIn job listing, then click Scan Page.</p>
+      <button class="btn scan" id="btn-scan">🔍 Scan Page</button>
+      <div id="scan-result"></div>
+    </div>
+
+    <!-- Step 2: Tailor Resume -->
+    <div class="step-content" id="step-2-content">
+      <div id="tailor-result"></div>
+    </div>
+
+    <!-- Step 3: Auto Apply -->
+    <div class="step-content" id="step-3-content">
+      <p class="hint">Click <strong style="color:#e5e7eb">Easy Apply</strong> on LinkedIn to open the form, then click Fill Fields below.</p>
+      <button class="btn primary" id="btn-fill">Fill Fields</button>
+      <div id="fill-result"></div>
+      <div id="apply-actions"></div>
+    </div>
+
   </div>
 
   <!-- Manual Panel -->
@@ -153,6 +389,6 @@
     <div id="manual-result"></div>
   </div>
 
-  <script src="popup.js"></script>
+  <script src="sidepanel.js"></script>
 </body>
 </html>
