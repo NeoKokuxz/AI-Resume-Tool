@@ -115,14 +115,13 @@ function showStep(step) {
 function populateResumeDownload() {
   const el = document.getElementById("resume-download");
   if (!tailoredResume || !el) return;
-  if (!resumeBlobUrl) {
-    const blob = new Blob([tailoredResume], { type: "text/plain" });
-    resumeBlobUrl = URL.createObjectURL(blob);
-  }
+  const downloadBtn = resumeBlobUrl
+    ? `<a href="${resumeBlobUrl}" download="tailored-resume.pdf" style="flex-shrink:0;font-size:12px;color:#a5b4fc;text-decoration:none;padding:4px 10px;background:#1e1b4b;border:1px solid #3730a3;border-radius:6px">⬇ PDF</a>`
+    : "";
   el.innerHTML = `
     <div style="margin-bottom:10px;padding:10px 12px;background:#052e16;border:1px solid #14532d;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:8px">
       <div style="font-size:12px;color:#86efac">✓ Tailored resume ready</div>
-      <a href="${resumeBlobUrl}" download="tailored-resume.txt" style="flex-shrink:0;font-size:12px;color:#a5b4fc;text-decoration:none;padding:4px 10px;background:#1e1b4b;border:1px solid #3730a3;border-radius:6px">⬇ Download</a>
+      ${downloadBtn}
     </div>
   `;
 }
@@ -263,15 +262,24 @@ async function goToStep2() {
     // Also save job to tracker (fire-and-forget)
     postJob(scannedJob).catch(() => {});
 
-    // Create blob URL for download
+    // Generate PDF blob URL for download
     if (resumeBlobUrl) URL.revokeObjectURL(resumeBlobUrl);
-    const blob = new Blob([tailoredResume], { type: "text/plain" });
-    resumeBlobUrl = URL.createObjectURL(blob);
+    try {
+      const pdfRes = await fetch(`${WEB_APP_URL}/api/generate-pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: tailoredResume, fileName: "tailored-resume" }),
+      });
+      if (pdfRes.ok) {
+        const pdfBlob = await pdfRes.blob();
+        resumeBlobUrl = URL.createObjectURL(pdfBlob);
+      }
+    } catch (_) { /* fall through — download button will be hidden if PDF fails */ }
 
     resultEl.innerHTML = `
       <div class="msg success" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
         <span>Resume tailored successfully!</span>
-        <a href="${resumeBlobUrl}" download="tailored-resume.txt" style="flex-shrink:0;font-size:12px;color:#a5b4fc;text-decoration:none;padding:4px 10px;background:#1e1b4b;border:1px solid #3730a3;border-radius:6px">⬇ Download</a>
+        ${resumeBlobUrl ? `<a href="${resumeBlobUrl}" download="tailored-resume.pdf" style="flex-shrink:0;font-size:12px;color:#a5b4fc;text-decoration:none;padding:4px 10px;background:#1e1b4b;border:1px solid #3730a3;border-radius:6px">⬇ PDF</a>` : ""}
       </div>
       ${collapsible("Tailored Resume", tailoredResume, "resume-preview")}
       ${collapsible("Cover Letter", coverLetter, "cl-preview")}
