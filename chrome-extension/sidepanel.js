@@ -115,13 +115,16 @@ function showStep(step) {
 function populateResumeDownload() {
   const el = document.getElementById("resume-download");
   if (!tailoredResume || !el) return;
-  const downloadBtn = resumeBlobUrl
-    ? `<a href="${resumeBlobUrl}" download="tailored-resume.pdf" style="flex-shrink:0;font-size:12px;color:#a5b4fc;text-decoration:none;padding:4px 10px;background:#1e1b4b;border:1px solid #3730a3;border-radius:6px">⬇ PDF</a>`
-    : "";
+  if (!resumeBlobUrl) {
+    resumeBlobUrl = URL.createObjectURL(new Blob([tailoredResume], { type: "text/plain" }));
+  }
+  const isPdf = resumeBlobUrl && !resumeBlobUrl.startsWith("blob:") === false;
+  // Determine label from what we have (PDF endpoint may have succeeded)
+  const dlName = "tailored-resume.pdf";
   el.innerHTML = `
     <div style="margin-bottom:10px;padding:10px 12px;background:#052e16;border:1px solid #14532d;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:8px">
       <div style="font-size:12px;color:#86efac">✓ Tailored resume ready</div>
-      ${downloadBtn}
+      <a href="${resumeBlobUrl}" download="${dlName}" style="flex-shrink:0;font-size:12px;color:#a5b4fc;text-decoration:none;padding:4px 10px;background:#1e1b4b;border:1px solid #3730a3;border-radius:6px">⬇ Download</a>
     </div>
   `;
 }
@@ -262,8 +265,9 @@ async function goToStep2() {
     // Also save job to tracker (fire-and-forget)
     postJob(scannedJob).catch(() => {});
 
-    // Generate PDF blob URL for download
+    // Generate PDF blob URL; fall back to plain-text blob if PDF endpoint fails
     if (resumeBlobUrl) URL.revokeObjectURL(resumeBlobUrl);
+    let downloadFileName = "tailored-resume.txt";
     try {
       const pdfRes = await fetch(`${WEB_APP_URL}/api/generate-pdf`, {
         method: "POST",
@@ -271,15 +275,18 @@ async function goToStep2() {
         body: JSON.stringify({ content: tailoredResume, fileName: "tailored-resume" }),
       });
       if (pdfRes.ok) {
-        const pdfBlob = await pdfRes.blob();
-        resumeBlobUrl = URL.createObjectURL(pdfBlob);
+        resumeBlobUrl = URL.createObjectURL(await pdfRes.blob());
+        downloadFileName = "tailored-resume.pdf";
       }
-    } catch (_) { /* fall through — download button will be hidden if PDF fails */ }
+    } catch (_) {}
+    if (!resumeBlobUrl) {
+      resumeBlobUrl = URL.createObjectURL(new Blob([tailoredResume], { type: "text/plain" }));
+    }
 
     resultEl.innerHTML = `
       <div class="msg success" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
         <span>Resume tailored successfully!</span>
-        ${resumeBlobUrl ? `<a href="${resumeBlobUrl}" download="tailored-resume.pdf" style="flex-shrink:0;font-size:12px;color:#a5b4fc;text-decoration:none;padding:4px 10px;background:#1e1b4b;border:1px solid #3730a3;border-radius:6px">⬇ PDF</a>` : ""}
+        <a href="${resumeBlobUrl}" download="${downloadFileName}" style="flex-shrink:0;font-size:12px;color:#a5b4fc;text-decoration:none;padding:4px 10px;background:#1e1b4b;border:1px solid #3730a3;border-radius:6px">⬇ ${downloadFileName.endsWith(".pdf") ? "PDF" : "TXT"}</a>
       </div>
       ${collapsible("Tailored Resume", tailoredResume, "resume-preview")}
       ${collapsible("Cover Letter", coverLetter, "cl-preview")}
