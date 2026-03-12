@@ -13,10 +13,7 @@ export async function OPTIONS() {
 export async function POST(request: NextRequest) {
   const { baseResume, jobTitle, company } = await request.json();
 
-  const tailoredResume = `${baseResume}
-
---- TAILORED FOR: ${jobTitle || "the position"} at ${company || "the company"} ---
-[Mock: resume keywords and bullet points have been optimized for this role]`;
+  const tailoredResume = baseResume;
 
   const coverLetter = `Dear Hiring Team,
 
