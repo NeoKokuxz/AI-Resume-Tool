@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { updateApplicationInDb, deleteApplicationFromDb } from "@/lib/db";
+import { updateApplicationInDb, deleteApplicationFromDb, saveTailoredResume, fetchResumeById } from "@/lib/db";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -123,7 +123,7 @@ function DraggableCard({
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
-        {!application.tailoredResume ? (
+        {!application.tailoredResumeId ? (
           <button
             onClick={onGenerateResume}
             disabled={isGenerating}
@@ -232,7 +232,9 @@ export default function ApplicationsPage() {
     useAppStore();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
-  const [viewingResume, setViewingResume] = useState<Application | null>(null);
+  const [viewingApplication, setViewingApplication] = useState<Application | null>(null);
+  const [viewingResumeContent, setViewingResumeContent] = useState<{ resume: string; coverLetter: string } | null>(null);
+  const [loadingResume, setLoadingResume] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -281,10 +283,17 @@ export default function ApplicationsPage() {
 
       const data = await res.json();
       if (data.tailoredResume) {
-        const updates = { tailoredResume: data.tailoredResume, coverLetter: data.coverLetter };
+        // Save tailored resume to resumes table, get back its ID
+        const tailoredResumeId = await saveTailoredResume(
+          data.tailoredResume,
+          application.job.title,
+          application.job.company
+        );
+        const updates = { tailoredResumeId: tailoredResumeId ?? undefined, coverLetter: data.coverLetter };
         updateApplication(application.id, updates);
         updateApplicationInDb(application.id, updates);
-        setViewingResume({ ...application, tailoredResume: data.tailoredResume, coverLetter: data.coverLetter });
+        setViewingApplication({ ...application, ...updates });
+        setViewingResumeContent({ resume: data.tailoredResume, coverLetter: data.coverLetter });
       }
     } catch (error) {
       console.error("Failed to generate resume:", error);
@@ -349,7 +358,16 @@ export default function ApplicationsPage() {
                       onDelete={() => { deleteApplicationFromDb(app.id); deleteApplication(app.id); }}
                       onGenerateResume={() => handleGenerateResume(app)}
                       isGenerating={generatingId === app.id}
-                      onViewResume={() => setViewingResume(app)}
+                      onViewResume={async () => {
+                        setViewingApplication(app);
+                        setViewingResumeContent(null);
+                        setLoadingResume(true);
+                        if (app.tailoredResumeId) {
+                          const r = await fetchResumeById(app.tailoredResumeId);
+                          setViewingResumeContent(r ? { resume: r.content, coverLetter: app.coverLetter || "" } : null);
+                        }
+                        setLoadingResume(false);
+                      }}
                       onUpdateNotes={(notes) => { updateApplication(app.id, { notes }); updateApplicationInDb(app.id, { notes }); }}
                     />
                   ))}
@@ -371,34 +389,43 @@ export default function ApplicationsPage() {
 
       {/* Resume Viewer Modal */}
       <Modal
-        isOpen={!!viewingResume}
-        onClose={() => setViewingResume(null)}
-        title={`Tailored Resume — ${viewingResume?.job.title} at ${viewingResume?.job.company}`}
+        isOpen={!!viewingApplication}
+        onClose={() => { setViewingApplication(null); setViewingResumeContent(null); }}
+        title={`Tailored Resume — ${viewingApplication?.job.title} at ${viewingApplication?.job.company}`}
         size="xl"
       >
-        {viewingResume && (
+        {viewingApplication && (
           <div className="space-y-4">
-            {viewingResume.tailoredResume && (
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <FileText size={14} className="text-green-400" />
-                  <h3 className="text-sm font-semibold text-gray-300">Tailored Resume</h3>
-                </div>
-                <pre className="bg-gray-800 rounded-xl p-4 text-xs text-gray-300 whitespace-pre-wrap font-mono max-h-72 overflow-y-auto leading-relaxed">
-                  {viewingResume.tailoredResume}
-                </pre>
+            {loadingResume ? (
+              <div className="flex items-center justify-center py-12 gap-3 text-gray-500">
+                <Loader2 size={18} className="animate-spin" />
+                <span className="text-sm">Loading resume...</span>
               </div>
-            )}
-            {viewingResume.coverLetter && (
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Briefcase size={14} className="text-blue-400" />
-                  <h3 className="text-sm font-semibold text-gray-300">Cover Letter</h3>
-                </div>
-                <pre className="bg-gray-800 rounded-xl p-4 text-xs text-gray-300 whitespace-pre-wrap font-mono max-h-52 overflow-y-auto leading-relaxed">
-                  {viewingResume.coverLetter}
-                </pre>
-              </div>
+            ) : (
+              <>
+                {viewingResumeContent?.resume && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText size={14} className="text-green-400" />
+                      <h3 className="text-sm font-semibold text-gray-300">Tailored Resume</h3>
+                    </div>
+                    <pre className="bg-gray-800 rounded-xl p-4 text-xs text-gray-300 whitespace-pre-wrap font-mono max-h-72 overflow-y-auto leading-relaxed">
+                      {viewingResumeContent.resume}
+                    </pre>
+                  </div>
+                )}
+                {viewingResumeContent?.coverLetter && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Briefcase size={14} className="text-blue-400" />
+                      <h3 className="text-sm font-semibold text-gray-300">Cover Letter</h3>
+                    </div>
+                    <pre className="bg-gray-800 rounded-xl p-4 text-xs text-gray-300 whitespace-pre-wrap font-mono max-h-52 overflow-y-auto leading-relaxed">
+                      {viewingResumeContent.coverLetter}
+                    </pre>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

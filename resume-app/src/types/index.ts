@@ -46,7 +46,7 @@ export interface Application {
   id: string;
   jobId: string;
   job: Job;
-  tailoredResume?: string;
+  tailoredResumeId?: string;
   coverLetter?: string;
   status: ApplicationStatus;
   atsScore?: number;

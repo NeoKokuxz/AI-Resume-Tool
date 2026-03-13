@@ -36,7 +36,7 @@ function mapApplication(row: Record<string, unknown>): Application {
     job,
     status: row.status as ApplicationStatus,
     atsScore: row.ats_score as number | undefined,
-    tailoredResume: (row.tailored_resume as string) || undefined,
+    tailoredResumeId: (row.tailored_resume_id as string) || undefined,
     coverLetter: (row.cover_letter as string) || undefined,
     notes: (row.notes as string) || undefined,
     appliedAt: row.applied_at as string,
@@ -72,6 +72,7 @@ export async function fetchAll() {
       .from("resumes")
       .select("*")
       .eq("user_id", userId)
+      .eq("type", "base")
       .order("uploaded_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
@@ -96,11 +97,49 @@ export async function saveResume(resume: Resume): Promise<void> {
 
   await supabase.from("resumes").upsert({
     user_id: userId,
+    type: "base",
     file_name: resume.fileName,
     content: resume.content,
     skills: resume.skills,
     uploaded_at: resume.uploadedAt,
   });
+}
+
+/** Save a tailored resume to the resumes table and return its ID. */
+export async function saveTailoredResume(
+  content: string,
+  jobTitle: string,
+  company: string
+): Promise<string | null> {
+  const userId = await getUserId();
+  if (!userId) return null;
+
+  const { data, error } = await supabase
+    .from("resumes")
+    .insert({
+      user_id: userId,
+      type: "tailored",
+      file_name: `Tailored — ${jobTitle} at ${company}`,
+      content,
+      skills: [],
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) return null;
+  return data.id as string;
+}
+
+/** Fetch a single resume by ID. */
+export async function fetchResumeById(id: string): Promise<Resume | null> {
+  const { data, error } = await supabase
+    .from("resumes")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error || !data) return null;
+  return mapResume(data);
 }
 
 // ─── Jobs ────────────────────────────────────────────────────────────────────
@@ -154,7 +193,7 @@ export async function createApplication(
       job_snapshot: appData.job,
       status: appData.status,
       ats_score: appData.atsScore ?? null,
-      tailored_resume: appData.tailoredResume ?? "",
+      tailored_resume_id: appData.tailoredResumeId ?? null,
       cover_letter: appData.coverLetter ?? "",
       notes: appData.notes ?? "",
     })
@@ -172,7 +211,7 @@ export async function updateApplicationInDb(
   const dbUpdates: Record<string, unknown> = {};
   if (updates.status) dbUpdates.status = updates.status;
   if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
-  if (updates.tailoredResume !== undefined) dbUpdates.tailored_resume = updates.tailoredResume;
+  if (updates.tailoredResumeId !== undefined) dbUpdates.tailored_resume_id = updates.tailoredResumeId;
   if (updates.coverLetter !== undefined) dbUpdates.cover_letter = updates.coverLetter;
   if (updates.atsScore !== undefined) dbUpdates.ats_score = updates.atsScore;
   await supabase.from("applications").update(dbUpdates).eq("id", id);
