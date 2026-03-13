@@ -183,32 +183,61 @@ score = keyword_match × 0.5 + experience_match × 0.3 + title_similarity × 0.2
 ```
 src/
 ├── app/
-│   ├── (app)/                    # Authenticated route group
-│   │   ├── layout.tsx            # Auth shell + hydration + onboarding redirect
-│   │   ├── page.tsx              # Dashboard
-│   │   ├── resume/page.tsx       # Resume manager
-│   │   ├── jobs/page.tsx         # Job listings + ATS scoring
-│   │   ├── applications/page.tsx # Kanban board
-│   │   └── email/page.tsx        # Email monitor
-│   ├── onboarding/page.tsx       # First-login onboarding flow
-│   ├── login/page.tsx            # Sign in / sign up
+│   ├── (app)/                         # Authenticated route group
+│   │   ├── layout.tsx                 # Auth shell + hydration + onboarding redirect
+│   │   ├── page.tsx                   # Dashboard (lean — composes components)
+│   │   ├── resume/page.tsx            # Resume manager
+│   │   ├── jobs/page.tsx              # Job listings + ATS scoring
+│   │   ├── applications/page.tsx      # Kanban board
+│   │   ├── email/page.tsx             # Email monitor
+│   │   └── profile/page.tsx           # User profile editor
+│   ├── onboarding/page.tsx            # First-login onboarding flow
+│   ├── login/page.tsx                 # Sign in / sign up
 │   └── api/
-│       ├── extract-resume/       # Gemini resume field extraction
-│       ├── analyze-job/          # Gemini job analysis
-│       ├── generate-resume/      # Gemini resume tailoring + cover letter
-│       ├── generate-pdf/         # PDF generation (pdf-lib)
-│       └── classify-email/       # Gemini email classification
+│       ├── extract-resume/            # Gemini resume field extraction
+│       ├── analyze-job/               # Gemini job analysis
+│       ├── generate-resume/           # Gemini resume tailoring + cover letter
+│       ├── generate-pdf/              # PDF generation (pdf-lib)
+│       └── classify-email/            # Gemini email classification
 ├── components/
-│   ├── layout/                   # Sidebar
-│   └── ui/                       # Button, Modal, Badge, ATSScoreRing
+│   ├── layout/
+│   │   └── Sidebar.tsx               # App sidebar with nav + user profile link
+│   ├── ui/
+│   │   ├── Button.tsx
+│   │   ├── Badge.tsx
+│   │   ├── Modal.tsx
+│   │   └── ATSScoreRing.tsx
+│   ├── dashboard/
+│   │   └── StatCard.tsx              # Stat metric card
+│   ├── resume/
+│   │   ├── ResumeUploader.tsx        # Drag-and-drop upload zone
+│   │   ├── ResumeEditor.tsx          # Textarea edit mode
+│   │   └── ResumeViewer.tsx          # Meta + skills + content viewer
+│   ├── jobs/
+│   │   ├── JobCard.tsx               # Job card with ATS breakdown
+│   │   └── AddJobModal.tsx           # Add job form modal
+│   ├── applications/
+│   │   ├── ApplicationCard.tsx       # Draggable application card
+│   │   ├── KanbanColumn.tsx          # Droppable kanban column
+│   │   └── ResumeModal.tsx           # Tailored resume + cover letter viewer
+│   ├── email/
+│   │   ├── EmailSummaryBar.tsx       # Classification summary grid
+│   │   ├── EmailGroup.tsx            # Group of emails by classification
+│   │   ├── EmailCard.tsx             # Single email row
+│   │   └── AddEmailModal.tsx         # Add email form modal
+│   └── profile/
+│       ├── ProfileField.tsx          # Reusable labeled input field
+│       └── SkillEditor.tsx           # Skill tag input (shared across pages)
 ├── lib/
-│   ├── store.ts                  # Zustand state
-│   ├── db.ts                     # Supabase CRUD operations
-│   ├── gemini.ts                 # Gemini client
-│   ├── ats-scorer.ts             # Local ATS scoring engine
-│   └── utils.ts                  # Helpers and formatters
+│   ├── store.ts                      # Zustand state management
+│   ├── db.ts                         # Supabase CRUD operations
+│   ├── gemini.ts                     # Gemini AI client
+│   ├── ats-scorer.ts                 # Local ATS scoring engine
+│   ├── resume-utils.ts               # Resume helpers (extractSkills)
+│   ├── email-utils.ts                # Email helpers (classifyEmail API call)
+│   └── utils.ts                      # Shared formatters and helpers
 └── types/
-    └── index.ts                  # Shared TypeScript types
+    └── index.ts                      # Shared TypeScript types
 ```
 
 ## License

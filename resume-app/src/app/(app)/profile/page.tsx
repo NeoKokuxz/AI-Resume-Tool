@@ -13,12 +13,12 @@ import {
   Github,
   Clock,
   FileText,
-  X,
-  Plus,
   CheckCircle,
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ProfileField } from "@/components/profile/ProfileField";
+import { SkillEditor } from "@/components/profile/SkillEditor";
 
 export default function ProfilePage() {
   const { baseResume } = useAppStore();
@@ -26,7 +26,6 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [skillInput, setSkillInput] = useState("");
 
   useEffect(() => {
     fetchUserProfile().then((p) => {
@@ -44,13 +43,11 @@ export default function ProfilePage() {
     setTimeout(() => setSaved(false), 2500);
   }
 
-  function addSkill() {
-    const trimmed = skillInput.trim();
-    if (!trimmed || !profile) return;
-    if (!profile.skills?.includes(trimmed)) {
-      setProfile((p) => p ? { ...p, skills: [...(p.skills ?? []), trimmed] } : p);
+  function addSkill(skill: string) {
+    if (!profile) return;
+    if (!profile.skills?.includes(skill)) {
+      setProfile((p) => p ? { ...p, skills: [...(p.skills ?? []), skill] } : p);
     }
-    setSkillInput("");
   }
 
   function removeSkill(skill: string) {
@@ -119,28 +116,28 @@ export default function ProfilePage() {
         <div className="card p-5">
           <h2 className="text-sm font-semibold text-gray-300 mb-4">Basic Information</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field
+            <ProfileField
               label="Full Name"
               icon={<User size={12} />}
               value={profile?.fullName ?? ""}
               onChange={(v) => setProfile((p) => p ? { ...p, fullName: v } : p)}
               placeholder="Jane Smith"
             />
-            <Field
+            <ProfileField
               label="Current Title"
               icon={<Briefcase size={12} />}
               value={profile?.workTitle ?? ""}
               onChange={(v) => setProfile((p) => p ? { ...p, workTitle: v } : p)}
               placeholder="Software Engineer"
             />
-            <Field
+            <ProfileField
               label="Location"
               icon={<MapPin size={12} />}
               value={profile?.location ?? ""}
               onChange={(v) => setProfile((p) => p ? { ...p, location: v } : p)}
               placeholder="San Francisco, CA"
             />
-            <Field
+            <ProfileField
               label="Years of Experience"
               icon={<Clock size={12} />}
               value={profile?.yearsExperience?.toString() ?? ""}
@@ -148,7 +145,7 @@ export default function ProfilePage() {
               placeholder="5"
               type="number"
             />
-            <Field
+            <ProfileField
               label="Phone"
               icon={<Phone size={12} />}
               value={profile?.phone ?? ""}
@@ -162,14 +159,14 @@ export default function ProfilePage() {
         <div className="card p-5">
           <h2 className="text-sm font-semibold text-gray-300 mb-4">Online Presence</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field
+            <ProfileField
               label="LinkedIn"
               icon={<Linkedin size={12} />}
               value={profile?.linkedin ?? ""}
               onChange={(v) => setProfile((p) => p ? { ...p, linkedin: v } : p)}
               placeholder="https://linkedin.com/in/..."
             />
-            <Field
+            <ProfileField
               label="GitHub"
               icon={<Github size={12} />}
               value={profile?.github ?? ""}
@@ -185,74 +182,13 @@ export default function ProfilePage() {
             <FileText size={13} className="text-gray-500" />
             Skills
           </h2>
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-3 focus-within:border-indigo-500 transition-colors">
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {(profile?.skills ?? []).map((skill) => (
-                <span
-                  key={skill}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-950 border border-indigo-800 text-indigo-300 text-xs rounded-md"
-                >
-                  {skill}
-                  <button onClick={() => removeSkill(skill)} className="hover:text-white transition-colors">
-                    <X size={10} />
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={skillInput}
-                onChange={(e) => setSkillInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addSkill(); } }}
-                placeholder="Type a skill and press Enter"
-                className="flex-1 bg-transparent text-sm text-gray-200 placeholder-gray-600 focus:outline-none"
-              />
-              <button
-                onClick={addSkill}
-                disabled={!skillInput.trim()}
-                className="text-indigo-400 hover:text-indigo-300 disabled:opacity-30 transition-colors"
-              >
-                <Plus size={16} />
-              </button>
-            </div>
-          </div>
-          <p className="text-xs text-gray-600 mt-1">Press Enter or comma to add a skill</p>
+          <SkillEditor
+            skills={profile?.skills ?? []}
+            onAdd={addSkill}
+            onRemove={removeSkill}
+          />
         </div>
       </div>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  icon,
-  value,
-  onChange,
-  placeholder,
-  type = "text",
-}: {
-  label: string;
-  icon: React.ReactNode;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  type?: string;
-}) {
-  return (
-    <div>
-      <label className="flex items-center gap-1.5 text-xs font-medium text-gray-400 mb-1.5">
-        {icon}
-        {label}
-      </label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        min={type === "number" ? 0 : undefined}
-        className="w-full px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-indigo-500 transition-colors"
-      />
     </div>
   );
 }
