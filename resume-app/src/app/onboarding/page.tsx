@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { updateUserProfile, fetchUserProfile, saveResume } from "@/lib/db";
 import { UserProfile, Resume } from "@/types";
 import { generateId } from "@/lib/utils";
@@ -39,7 +38,6 @@ interface ExtractedProfile {
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>("upload");
   const [isDragging, setIsDragging] = useState(false);
