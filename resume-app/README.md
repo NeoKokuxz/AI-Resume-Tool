@@ -28,7 +28,8 @@ An AI-powered job application automation system that helps you track application
 | Auth & Database | Supabase (PostgreSQL + Row Level Security) |
 | State | Zustand |
 | AI | Google Gemini 2.5 Flash |
-| PDF Parsing | pdfjs-dist (server-side) |
+| PDF Parsing | pdfjs-dist (text extraction) |
+| PDF Generation | pdf-lib (resume download) |
 | Drag & Drop | @dnd-kit |
 | Icons | Lucide React |
 
@@ -197,7 +198,8 @@ src/
 │       ├── extract-resume/            # Gemini resume field extraction
 │       ├── analyze-job/               # Gemini job analysis
 │       ├── generate-resume/           # Gemini resume tailoring + cover letter
-│       ├── generate-pdf/              # PDF generation (pdf-lib)
+│       ├── generate-pdf/              # PDF generation (delegates to pdf-utils)
+│       ├── parse-pdf/                 # PDF text extraction (delegates to pdf-utils)
 │       └── classify-email/            # Gemini email classification
 ├── components/
 │   ├── layout/
@@ -233,6 +235,7 @@ src/
 │   ├── db.ts                         # Supabase CRUD operations
 │   ├── gemini.ts                     # Gemini AI client
 │   ├── ats-scorer.ts                 # Local ATS scoring engine
+│   ├── pdf-utils.ts                  # All PDF logic: parsePDFText + generatePDFBytes
 │   ├── resume-utils.ts               # Resume helpers (extractSkills)
 │   ├── email-utils.ts                # Email helpers (classifyEmail API call)
 │   └── utils.ts                      # Shared formatters and helpers
