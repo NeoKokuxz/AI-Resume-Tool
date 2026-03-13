@@ -95,14 +95,52 @@ export async function saveResume(resume: Resume): Promise<void> {
   const userId = await getUserId();
   if (!userId) return;
 
-  await supabase.from("resumes").upsert({
-    user_id: userId,
-    type: "base",
-    file_name: resume.fileName,
-    content: resume.content,
-    skills: resume.skills,
-    uploaded_at: resume.uploadedAt,
-  });
+  // Delete any existing base resume first so we don't accumulate stale rows
+  const { data: existing } = await supabase
+    .from("resumes")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("type", "base")
+    .maybeSingle();
+
+  const { data } = await supabase
+    .from("resumes")
+    .upsert({
+      ...(existing?.id ? { id: existing.id } : {}),
+      user_id: userId,
+      type: "base",
+      file_name: resume.fileName,
+      content: resume.content,
+      skills: resume.skills,
+      uploaded_at: resume.uploadedAt,
+    })
+    .select("id")
+    .single();
+
+  // Keep user_profiles.base_resume_id in sync
+  if (data?.id) {
+    await supabase
+      .from("user_profiles")
+      .upsert({ id: userId, base_resume_id: data.id });
+  }
+}
+
+export async function deleteResume(): Promise<void> {
+  const userId = await getUserId();
+  if (!userId) return;
+
+  // Clear base_resume_id in profile first (FK constraint)
+  await supabase
+    .from("user_profiles")
+    .update({ base_resume_id: null })
+    .eq("id", userId);
+
+  // Delete all base resumes for this user
+  await supabase
+    .from("resumes")
+    .delete()
+    .eq("user_id", userId)
+    .eq("type", "base");
 }
 
 /** Save a tailored resume to the resumes table and return its ID. */

@@ -5,7 +5,7 @@ import { useAppStore } from "@/lib/store";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { generateId, formatRelativeTime } from "@/lib/utils";
-import { saveResume } from "@/lib/db";
+import { saveResume, deleteResume } from "@/lib/db";
 import { Resume } from "@/types";
 import {
   Upload,
@@ -140,7 +140,7 @@ export default function ResumePage() {
               variant="danger"
               size="sm"
               icon={<Trash2 size={14} />}
-              onClick={() => setBaseResume(null)}
+              onClick={() => { setBaseResume(null); deleteResume(); }}
             >
               Remove
             </Button>
