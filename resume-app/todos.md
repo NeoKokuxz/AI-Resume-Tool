@@ -28,10 +28,7 @@ Data is lost on every server restart. No user association.
 
 ## 🟡 Incomplete Features
 
-### Profile Settings Page
-Users can set their profile during onboarding but there is no page to view or edit it afterward.
-- [ ] Build `/settings` or `/profile` page showing all `user_profiles` fields
-- [ ] Allow editing name, title, years of experience, location, phone, LinkedIn, GitHub, skills
+### ~~Profile Settings Page~~ ✅ Done
 
 ### Resume Page — No PDF Export
 The resume page shows plain text content. There is no way to download the base resume as PDF from the web app (only the Chrome extension generates PDFs).
