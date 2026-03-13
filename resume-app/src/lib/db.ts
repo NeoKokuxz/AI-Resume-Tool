@@ -147,7 +147,8 @@ export async function fetchAll() {
     supabase.from("emails").select("*").eq("user_id", userId).order("received_at", { ascending: false }),
   ]);
 
-  const resumeRow = profileRes.data?.resumes as Record<string, unknown> | null ?? null;
+  const resumesData = profileRes.data?.resumes;
+  const resumeRow = (Array.isArray(resumesData) ? resumesData[0] : resumesData) as Record<string, unknown> | null ?? null;
 
   return {
     onboarded: profileRes.data?.onboarded ?? false,

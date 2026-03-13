@@ -7,6 +7,7 @@ import { calculateATSScore } from "@/lib/ats-scorer";
 import { createJob, deleteJobFromDb, createApplication } from "@/lib/db";
 import { Job } from "@/types";
 import { Plus, Briefcase, Zap } from "lucide-react";
+import { generateId } from "@/lib/utils";
 import { JobCard } from "@/components/jobs/JobCard";
 import { AddJobModal } from "@/components/jobs/AddJobModal";
 
@@ -24,11 +25,13 @@ export default function JobsPage() {
         if (data.jobs && data.jobs.length > 0) {
           for (const job of data.jobs) {
             addJob({
+              id: generateId(),
               title: job.title || "Software Engineer",
               company: job.company || "Unknown Company",
               description: job.description || "",
               location: job.location || "Remote",
               url: job.url,
+              addedAt: new Date().toISOString(),
             });
           }
           setImportBanner(

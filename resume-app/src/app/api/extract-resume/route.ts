@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { geminiJson } from "@/lib/gemini";
-// pdf-parse has a known issue with Next.js — import from the lib path directly
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
+import { parsePDFText } from "@/lib/pdf-utils";
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,39 +9,13 @@ export async function POST(request: NextRequest) {
     if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
 
     const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
-    let resumeText = "";
     const isPDF = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 
+    let resumeText = "";
     if (isPDF) {
-      const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(bytes) });
-      const pdf = await loadingTask.promise;
-      const pages: string[] = [];
-      const annotationUrls: string[] = [];
-
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-
-        // Extract visible text
-        const content = await page.getTextContent();
-        pages.push(content.items.map((item: { str?: string }) => item.str ?? "").join(" "));
-
-        // Extract hyperlink annotations (embedded clickable links)
-        const annotations = await page.getAnnotations();
-        for (const ann of annotations) {
-          if (ann.url) annotationUrls.push(ann.url);
-          if (ann.unsafeUrl) annotationUrls.push(ann.unsafeUrl);
-        }
-      }
-
-      // Append extracted URLs as plain text so the AI can see them
-      const urlBlock = annotationUrls.length > 0
-        ? "\n\nEmbedded links:\n" + annotationUrls.join("\n")
-        : "";
-      resumeText = pages.join("\n") + urlBlock;
+      resumeText = await parsePDFText(bytes);
     } else {
-      resumeText = buffer.toString("utf-8");
+      resumeText = Buffer.from(bytes).toString("utf-8");
     }
 
     if (!resumeText.trim()) {
@@ -80,7 +53,6 @@ Rules:
 
     const extracted = JSON.parse(jsonMatch[0]);
 
-    // Normalize linkedin/github to full URLs
     if (extracted.linkedin && !extracted.linkedin.startsWith("http")) {
       const slug = extracted.linkedin.replace(/.*linkedin\.com\/in\//i, "").replace(/^\//, "");
       extracted.linkedin = `https://linkedin.com/in/${slug}`;

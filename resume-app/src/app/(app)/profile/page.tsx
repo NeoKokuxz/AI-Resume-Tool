@@ -104,11 +104,19 @@ export default function ProfilePage() {
             <p className="text-sm text-gray-400 mt-0.5">{profile?.workTitle || "No title set"}</p>
             <p className="text-xs text-gray-600 mt-1">{profile?.location || "No location set"}</p>
           </div>
-          {baseResume && (
+          {baseResume ? (
             <div className="flex items-center gap-1.5 text-xs text-green-400 bg-green-950 border border-green-800 px-2.5 py-1 rounded-lg flex-shrink-0">
               <CheckCircle size={11} />
               Resume active
             </div>
+          ) : (
+            <a
+              href="/resume"
+              className="flex items-center gap-1.5 text-xs text-gray-500 bg-gray-800 border border-gray-700 hover:border-indigo-600 hover:text-indigo-400 px-2.5 py-1 rounded-lg flex-shrink-0 transition-colors"
+            >
+              <FileText size={11} />
+              No resume — upload one
+            </a>
           )}
         </div>
 

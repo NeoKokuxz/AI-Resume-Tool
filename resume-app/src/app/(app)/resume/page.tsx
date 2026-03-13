@@ -17,21 +17,29 @@ export default function ResumePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
 
-  function handleFile(file: File) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = (e.target?.result as string) || "";
-      const resume: Resume = {
-        id: generateId(),
-        fileName: file.name,
-        content,
-        skills: extractSkills(content),
-        uploadedAt: new Date().toISOString(),
-      };
-      setBaseResume(resume);
-      saveResume(resume);
+  async function handleFile(file: File) {
+    let content = "";
+
+    const isPDF = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    if (isPDF) {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/parse-pdf", { method: "POST", body: formData });
+      const data = await res.json();
+      content = data.text ?? "";
+    } else {
+      content = await file.text();
+    }
+
+    const resume: Resume = {
+      id: generateId(),
+      fileName: file.name,
+      content,
+      skills: extractSkills(content),
+      uploadedAt: new Date().toISOString(),
     };
-    reader.readAsText(file);
+    setBaseResume(resume);
+    saveResume(resume);
   }
 
   function handlePasteMode() {

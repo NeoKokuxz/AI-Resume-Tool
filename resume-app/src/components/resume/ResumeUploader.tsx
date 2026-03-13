@@ -43,7 +43,7 @@ export function ResumeUploader({ onFile, onPasteMode }: ResumeUploaderProps) {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".txt,.md,.doc,.docx"
+          accept=".pdf,.txt,.md,.doc,.docx"
           onChange={handleFileInput}
           className="hidden"
         />
@@ -54,7 +54,7 @@ export function ResumeUploader({ onFile, onPasteMode }: ResumeUploaderProps) {
           Drop your resume here
         </p>
         <p className="text-sm text-gray-500">
-          Supports .txt, .md, .doc, .docx files
+          Supports .pdf, .txt, .md, .doc, .docx files
         </p>
       </div>
 
