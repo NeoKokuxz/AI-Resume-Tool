@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
+import { updateApplicationInDb, deleteApplicationFromDb } from "@/lib/db";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -255,6 +256,7 @@ export default function ApplicationsPage() {
 
     if (validStatuses.includes(newStatus)) {
       updateApplicationStatus(applicationId, newStatus);
+      updateApplicationInDb(applicationId, { status: newStatus });
     }
   }
 
@@ -279,10 +281,9 @@ export default function ApplicationsPage() {
 
       const data = await res.json();
       if (data.tailoredResume) {
-        updateApplication(application.id, {
-          tailoredResume: data.tailoredResume,
-          coverLetter: data.coverLetter,
-        });
+        const updates = { tailoredResume: data.tailoredResume, coverLetter: data.coverLetter };
+        updateApplication(application.id, updates);
+        updateApplicationInDb(application.id, updates);
         setViewingResume({ ...application, tailoredResume: data.tailoredResume, coverLetter: data.coverLetter });
       }
     } catch (error) {
@@ -345,11 +346,11 @@ export default function ApplicationsPage() {
                     <DraggableCard
                       key={app.id}
                       application={app}
-                      onDelete={() => deleteApplication(app.id)}
+                      onDelete={() => { deleteApplicationFromDb(app.id); deleteApplication(app.id); }}
                       onGenerateResume={() => handleGenerateResume(app)}
                       isGenerating={generatingId === app.id}
                       onViewResume={() => setViewingResume(app)}
-                      onUpdateNotes={(notes) => updateApplication(app.id, { notes })}
+                      onUpdateNotes={(notes) => { updateApplication(app.id, { notes }); updateApplicationInDb(app.id, { notes }); }}
                     />
                   ))}
                 </DroppableColumn>

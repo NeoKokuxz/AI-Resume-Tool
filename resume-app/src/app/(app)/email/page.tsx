@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
+import { createEmail, updateEmailInDb, deleteEmailFromDb } from "@/lib/db";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -81,13 +82,13 @@ export default function EmailPage() {
 
     try {
       const classification = await classifyEmail(subject, body);
-      addEmail({
+      const email = await createEmail({
         subject: subject || "(No subject)",
         sender: sender || "unknown@email.com",
         body,
         classification,
-        relatedJobId: relatedJobId || undefined,
       });
+      if (email) addEmail(email);
       resetForm();
       setIsModalOpen(false);
     } finally {
@@ -100,6 +101,7 @@ export default function EmailPage() {
     try {
       const classification = await classifyEmail(emailSubject, emailBody);
       updateEmail(emailId, { classification });
+      updateEmailInDb(emailId, { classification });
     } finally {
       setClassifyingId(null);
     }
@@ -228,7 +230,7 @@ export default function EmailPage() {
                                 )}
                               </button>
                               <button
-                                onClick={() => deleteEmail(email.id)}
+                                onClick={() => { deleteEmailFromDb(email.id); deleteEmail(email.id); }}
                                 className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-950/30 transition-colors"
                               >
                                 <Trash2 size={13} />

@@ -6,8 +6,9 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ATSScoreRing } from "@/components/ui/ATSScoreRing";
-import { generateId, formatRelativeTime } from "@/lib/utils";
+import { formatRelativeTime } from "@/lib/utils";
 import { calculateATSScore } from "@/lib/ats-scorer";
+import { createJob, deleteJobFromDb, createApplication } from "@/lib/db";
 import { Job } from "@/types";
 import {
   Plus,
@@ -183,8 +184,7 @@ function JobCard({
 }
 
 export default function JobsPage() {
-  const { jobs, addJob, deleteJob, addApplication, applications, baseResume } =
-    useAppStore();
+  const { jobs, addJob, deleteJob, addApplication, applications, baseResume } = useAppStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [importBanner, setImportBanner] = useState<string | null>(null);
@@ -269,7 +269,7 @@ export default function JobsPage() {
         }
       }
 
-      addJob({
+      const job = await createJob({
         title: resolvedTitle || "Software Engineer",
         company: resolvedCompany || "Unknown Company",
         description,
@@ -277,6 +277,7 @@ export default function JobsPage() {
         url: url || undefined,
         atsResult,
       });
+      if (job) addJob(job);
 
       resetForm();
       setIsModalOpen(false);
@@ -285,13 +286,14 @@ export default function JobsPage() {
     }
   }
 
-  function handleCreateApplication(job: Job) {
-    addApplication({
+  async function handleCreateApplication(job: Job) {
+    const app = await createApplication({
       jobId: job.id,
       job,
       status: "saved",
       atsScore: job.atsResult?.score,
     });
+    if (app) addApplication(app);
   }
 
   return (
@@ -341,7 +343,7 @@ export default function JobsPage() {
             <JobCard
               key={job.id}
               job={job}
-              onDelete={() => deleteJob(job.id)}
+              onDelete={() => { deleteJobFromDb(job.id); deleteJob(job.id); }}
               onCreateApplication={handleCreateApplication}
               hasApplication={appliedJobIds.has(job.id)}
             />

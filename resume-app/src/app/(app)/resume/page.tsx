@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useAppStore } from "@/lib/store";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { generateId, formatRelativeTime } from "@/lib/utils";
+import { saveResume } from "@/lib/db";
 import { Resume } from "@/types";
 import {
   Upload,
@@ -34,17 +35,6 @@ function extractSkills(content: string): string[] {
 export default function ResumePage() {
   const { baseResume, setBaseResume } = useAppStore();
   const [isDragging, setIsDragging] = useState(false);
-
-  // Sync resume from store to disk cache so the Chrome extension can access it
-  useEffect(() => {
-    if (baseResume) {
-      fetch('/api/resume', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: baseResume.content, fileName: baseResume.fileName }),
-      });
-    }
-  }, [baseResume]);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -61,11 +51,7 @@ export default function ResumePage() {
         uploadedAt: new Date().toISOString(),
       };
       setBaseResume(resume);
-      fetch('/api/resume', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: resume.content, fileName: resume.fileName }),
-      });
+      saveResume(resume);
     };
     reader.readAsText(file);
   }
@@ -97,11 +83,7 @@ export default function ResumePage() {
       uploadedAt: new Date().toISOString(),
     };
     setBaseResume(resume);
-    fetch('/api/resume', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: resume.content, fileName: resume.fileName }),
-    });
+    saveResume(resume);
     setIsEditing(false);
   }
 
