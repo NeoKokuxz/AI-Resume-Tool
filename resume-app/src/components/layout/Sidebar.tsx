@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   FileText,
@@ -10,8 +10,10 @@ import {
   Mail,
   Bot,
   ChevronRight,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 
 const navItems = [
   {
@@ -43,6 +45,13 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const supabase = createClient();
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    router.push("/login");
+  }
 
   return (
     <aside className="w-60 flex-shrink-0 bg-gray-900 border-r border-gray-800 flex flex-col">
@@ -92,13 +101,20 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-4 py-4 border-t border-gray-800">
+      <div className="px-4 py-4 border-t border-gray-800 space-y-3">
         <div className="bg-indigo-950/50 border border-indigo-900/50 rounded-lg p-3">
           <p className="text-xs font-medium text-indigo-300 mb-0.5">Powered by Claude AI</p>
           <p className="text-xs text-indigo-400/60">
             Resume optimization & email classification
           </p>
         </div>
+        <button
+          onClick={handleSignOut}
+          className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-all"
+        >
+          <LogOut size={15} />
+          Sign out
+        </button>
       </div>
     </aside>
   );
