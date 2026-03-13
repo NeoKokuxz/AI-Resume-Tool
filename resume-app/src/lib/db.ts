@@ -61,6 +61,31 @@ async function getUserId(): Promise<string | null> {
   return user?.id ?? null;
 }
 
+// ─── User Profile ─────────────────────────────────────────────────────────────
+
+export async function syncUserProfile(): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { data: existing } = await supabase
+    .from("user_profiles")
+    .select("email, full_name")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const email = user.email ?? "";
+  const fullName = user.user_metadata?.full_name ?? user.user_metadata?.name ?? "";
+
+  // Skip if nothing has changed
+  if (existing?.email === email && existing?.full_name === (fullName || existing?.full_name)) return;
+
+  const updates: Record<string, string> = { id: user.id };
+  if (email && existing?.email !== email) updates.email = email;
+  if (fullName && existing?.full_name !== fullName) updates.full_name = fullName;
+
+  await supabase.from("user_profiles").upsert(updates);
+}
+
 // ─── Hydrate ─────────────────────────────────────────────────────────────────
 
 export async function fetchAll() {

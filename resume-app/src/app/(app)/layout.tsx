@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/lib/store";
-import { fetchAll } from "@/lib/db";
+import { fetchAll, syncUserProfile } from "@/lib/db";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -18,6 +18,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     fetchAll().then((data) => {
       if (data) hydrate(data);
     });
+
+    // Sync user profile (skips if data unchanged)
+    syncUserProfile();
 
     // Redirect to login on sign out
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
