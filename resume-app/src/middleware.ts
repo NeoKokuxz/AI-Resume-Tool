@@ -22,9 +22,14 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isAuthPage = request.nextUrl.pathname.startsWith("/login");
+  const pathname = request.nextUrl.pathname;
+  const isAuthPage = pathname.startsWith("/login");
+  const isOnboardingPage = pathname.startsWith("/onboarding");
 
-  if (!user && !isAuthPage) {
+  if (!user && !isAuthPage && !isOnboardingPage) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+  if (!user && isOnboardingPage) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
   if (user && isAuthPage) {

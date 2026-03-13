@@ -16,7 +16,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Hydrate store from Supabase on mount
     fetchAll().then((data) => {
-      if (data) hydrate(data);
+      if (data) {
+        if (!data.onboarded) {
+          router.push("/onboarding");
+          return;
+        }
+        hydrate(data);
+      }
     });
 
     // Sync user profile (skips if data unchanged)

@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
-import { Application, ApplicationStatus, Email, EmailClassification, Job, Resume } from "@/types";
+import { Application, ApplicationStatus, Email, EmailClassification, Job, Resume, UserProfile } from "@/types";
 
 const supabase = createClient();
 
@@ -86,28 +86,72 @@ export async function syncUserProfile(): Promise<void> {
   await supabase.from("user_profiles").upsert(updates);
 }
 
+// ─── User Profile extended ────────────────────────────────────────────────────
+
+export async function fetchUserProfile(): Promise<UserProfile | null> {
+  const userId = await getUserId();
+  if (!userId) return null;
+
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("full_name, work_title, years_experience, linkedin, github, phone, location, skills, onboarded")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (!data) return null;
+  return {
+    fullName: data.full_name ?? undefined,
+    workTitle: data.work_title ?? undefined,
+    yearsExperience: data.years_experience ?? undefined,
+    linkedin: data.linkedin ?? undefined,
+    github: data.github ?? undefined,
+    phone: data.phone ?? undefined,
+    location: data.location ?? undefined,
+    skills: data.skills ?? undefined,
+    onboarded: data.onboarded ?? false,
+  };
+}
+
+export async function updateUserProfile(updates: Partial<UserProfile>): Promise<void> {
+  const userId = await getUserId();
+  if (!userId) return;
+
+  const dbUpdates: Record<string, unknown> = { id: userId };
+  if (updates.fullName !== undefined) dbUpdates.full_name = updates.fullName;
+  if (updates.workTitle !== undefined) dbUpdates.work_title = updates.workTitle;
+  if (updates.yearsExperience !== undefined) dbUpdates.years_experience = updates.yearsExperience;
+  if (updates.linkedin !== undefined) dbUpdates.linkedin = updates.linkedin;
+  if (updates.github !== undefined) dbUpdates.github = updates.github;
+  if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+  if (updates.location !== undefined) dbUpdates.location = updates.location;
+  if (updates.skills !== undefined) dbUpdates.skills = updates.skills;
+  if (updates.onboarded !== undefined) dbUpdates.onboarded = updates.onboarded;
+
+  await supabase.from("user_profiles").upsert(dbUpdates);
+}
+
 // ─── Hydrate ─────────────────────────────────────────────────────────────────
 
 export async function fetchAll() {
   const userId = await getUserId();
   if (!userId) return null;
 
-  const [resumeRes, jobsRes, appsRes, emailsRes] = await Promise.all([
+  const [profileRes, jobsRes, appsRes, emailsRes] = await Promise.all([
     supabase
-      .from("resumes")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("type", "base")
-      .order("uploaded_at", { ascending: false })
-      .limit(1)
+      .from("user_profiles")
+      .select("onboarded, base_resume_id, resumes(*)")
+      .eq("id", userId)
       .maybeSingle(),
     supabase.from("jobs").select("*").eq("user_id", userId).order("added_at", { ascending: false }),
     supabase.from("applications").select("*").eq("user_id", userId).order("applied_at", { ascending: false }),
     supabase.from("emails").select("*").eq("user_id", userId).order("received_at", { ascending: false }),
   ]);
 
+  const resumeRow = profileRes.data?.resumes as Record<string, unknown> | null ?? null;
+
   return {
-    resume: resumeRes.data ? mapResume(resumeRes.data) : null,
+    onboarded: profileRes.data?.onboarded ?? false,
+    resume: resumeRow ? mapResume(resumeRow) : null,
     jobs: (jobsRes.data ?? []).map(mapJob),
     applications: (appsRes.data ?? []).map(mapApplication),
     emails: (emailsRes.data ?? []).map(mapEmail),

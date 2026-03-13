@@ -64,6 +64,18 @@ export interface Email {
   receivedAt: string;
 }
 
+export interface UserProfile {
+  fullName?: string;
+  workTitle?: string;
+  yearsExperience?: number;
+  linkedin?: string;
+  github?: string;
+  phone?: string;
+  location?: string;
+  skills?: string[];
+  onboarded: boolean;
+}
+
 export interface DashboardStats {
   totalApplications: number;
   interviews: number;

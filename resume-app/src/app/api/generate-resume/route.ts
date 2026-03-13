@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { geminiFlash } from "@/lib/gemini";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,20 +12,58 @@ export async function OPTIONS() {
 }
 
 export async function POST(request: NextRequest) {
-  const { baseResume, jobTitle, company } = await request.json();
+  try {
+    const { baseResume, jobDescription, jobTitle, company } = await request.json();
 
-  const tailoredResume = baseResume;
+    if (!baseResume || !jobDescription) {
+      return NextResponse.json(
+        { error: "Base resume and job description are required" },
+        { status: 400, headers: corsHeaders }
+      );
+    }
 
-  const coverLetter = `Dear Hiring Team,
+    const resumePrompt = `You are an expert resume writer. Tailor the following resume to match the job description.
+Keep the same structure and format. Emphasize relevant skills and experience. Do not fabricate experience.
 
-I'm excited to apply for the ${jobTitle || "open position"} role at ${company || "your company"}. With my background in software engineering and a proven track record of delivering scalable solutions, I'm confident I can make an immediate impact on your team.
+Job Title: ${jobTitle || "Unknown"}
+Company: ${company || "Unknown"}
 
-Over the past several years, I've developed expertise in the technologies and methodologies that align directly with your requirements. My experience building high-performance applications and collaborating cross-functionally has prepared me well for this opportunity.
+Job Description:
+${jobDescription.slice(0, 3000)}
 
-I'd welcome the chance to discuss how my skills can contribute to ${company || "your company"}'s goals.
+Base Resume:
+${baseResume.slice(0, 4000)}
 
-Best regards,
-[Your Name]`;
+Return ONLY the tailored resume text, no commentary, no markdown headers.`;
 
-  return NextResponse.json({ tailoredResume, coverLetter }, { headers: corsHeaders });
+    const coverLetterPrompt = `Write a concise, professional cover letter for this job application.
+3 paragraphs max. No placeholders — write naturally even without personal details.
+
+Job Title: ${jobTitle || "the position"}
+Company: ${company || "the company"}
+
+Job Description:
+${jobDescription.slice(0, 2000)}
+
+Resume Summary:
+${baseResume.slice(0, 1500)}
+
+Return ONLY the cover letter text.`;
+
+    const [resumeResult, coverResult] = await Promise.all([
+      geminiFlash.generateContent(resumePrompt),
+      geminiFlash.generateContent(coverLetterPrompt),
+    ]);
+
+    const tailoredResume = resumeResult.response.text().trim();
+    const coverLetter = coverResult.response.text().trim();
+
+    return NextResponse.json({ tailoredResume, coverLetter }, { headers: corsHeaders });
+  } catch (error) {
+    console.error("Error generating resume:", error);
+    return NextResponse.json(
+      { error: "Failed to generate resume" },
+      { status: 500, headers: corsHeaders }
+    );
+  }
 }
