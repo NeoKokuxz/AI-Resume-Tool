@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { updateApplicationInDb, deleteApplicationFromDb, saveTailoredResume, fetchResumeById } from "@/lib/db";
+import { updateApplicationInDb, deleteApplicationFromDb, fetchAll, fetchResumeById } from "@/lib/db";
 import { APPLICATION_STATUSES, ApplicationStatus, Application } from "@/types";
 import {
   DndContext,
@@ -17,15 +17,47 @@ import { KanbanSquare } from "lucide-react";
 import { ApplicationCard } from "@/components/applications/ApplicationCard";
 import { KanbanColumn } from "@/components/applications/KanbanColumn";
 import { ResumeModal } from "@/components/applications/ResumeModal";
+import { JobDetailModal } from "@/components/applications/JobDetailModal";
+import { useAIOperation } from "@/lib/ai-queue/realtime";
 
 export default function ApplicationsPage() {
-  const { applications, updateApplicationStatus, deleteApplication, updateApplication, baseResume } =
+  const { applications, updateApplicationStatus, deleteApplication, updateApplication, baseResume, hydrate } =
     useAppStore();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [jobDetailApp, setJobDetailApp] = useState<Application | null>(null);
   const [viewingApplication, setViewingApplication] = useState<Application | null>(null);
   const [viewingResumeContent, setViewingResumeContent] = useState<{ resume: string; coverLetter: string } | null>(null);
   const [loadingResume, setLoadingResume] = useState(false);
+  const [pendingOp, setPendingOp] = useState<{ operationId: string; applicationId: string } | null>(null);
+
+  useAIOperation({
+    operationId: pendingOp?.operationId ?? null,
+    onSuccess: async () => {
+      const data = await fetchAll();
+      if (data) hydrate(data);
+
+      // Find updated application and open modal
+      const appId = pendingOp?.applicationId;
+      setPendingOp(null);
+      setGeneratingId(null);
+
+      if (appId) {
+        const updatedApp = useAppStore.getState().applications.find((a) => a.id === appId);
+        if (updatedApp?.tailoredResumeId) {
+          setViewingApplication(updatedApp);
+          setLoadingResume(true);
+          const r = await fetchResumeById(updatedApp.tailoredResumeId);
+          setViewingResumeContent(r ? { resume: r.content, coverLetter: updatedApp.coverLetter || "" } : null);
+          setLoadingResume(false);
+        }
+      }
+    },
+    onError: () => {
+      setPendingOp(null);
+      setGeneratingId(null);
+    },
+  });
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -60,42 +92,31 @@ export default function ApplicationsPage() {
     }
 
     setGeneratingId(application.id);
-    try {
-      const res = await fetch("/api/generate-resume", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+
+    const res = await fetch("/api/ai-queue/enqueue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        operationType: "generate_resume",
+        payload: {
           baseResume: baseResume.content,
           jobDescription: application.job.description,
           jobTitle: application.job.title,
           company: application.job.company,
-        }),
-      });
+          applicationId: application.id,
+        },
+      }),
+    });
 
-      const data = await res.json();
-      if (data.tailoredResume) {
-        const tailoredResumeId = await saveTailoredResume(
-          data.tailoredResume,
-          application.job.title,
-          application.job.company
-        );
-        const updates = { tailoredResumeId: tailoredResumeId ?? undefined, coverLetter: data.coverLetter };
-        updateApplication(application.id, updates);
-        updateApplicationInDb(application.id, updates);
-        setViewingApplication({ ...application, ...updates });
-        setViewingResumeContent({ resume: data.tailoredResume, coverLetter: data.coverLetter });
-      }
-    } catch (error) {
-      console.error("Failed to generate resume:", error);
-    } finally {
+    const data = await res.json();
+    if (data.operationId) {
+      setPendingOp({ operationId: data.operationId, applicationId: application.id });
+    } else {
       setGeneratingId(null);
     }
   }
 
-  const activeApplication = activeId
-    ? applications.find((a) => a.id === activeId)
-    : null;
-
+  const activeApplication = activeId ? applications.find((a) => a.id === activeId) : null;
   const groupedApplications = APPLICATION_STATUSES.reduce((acc, { value }) => {
     acc[value] = applications.filter((a) => a.status === value);
     return acc;
@@ -127,20 +148,11 @@ export default function ApplicationsPage() {
           </div>
         </div>
       ) : (
-        <DndContext
-          sensors={sensors}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
+        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden px-6 pb-6">
             <div className="flex gap-4 h-full">
               {APPLICATION_STATUSES.map(({ value, label }) => (
-                <KanbanColumn
-                  key={value}
-                  status={value}
-                  label={label}
-                  count={groupedApplications[value].length}
-                >
+                <KanbanColumn key={value} status={value} label={label} count={groupedApplications[value].length}>
                   {groupedApplications[value].map((app) => (
                     <ApplicationCard
                       key={app.id}
@@ -159,6 +171,7 @@ export default function ApplicationsPage() {
                         setLoadingResume(false);
                       }}
                       onUpdateNotes={(notes) => { updateApplication(app.id, { notes }); updateApplicationInDb(app.id, { notes }); }}
+                      onViewDetails={() => setJobDetailApp(app)}
                     />
                   ))}
                 </KanbanColumn>
@@ -183,6 +196,13 @@ export default function ApplicationsPage() {
         loading={loadingResume}
         onClose={() => { setViewingApplication(null); setViewingResumeContent(null); }}
       />
+
+      {jobDetailApp && (
+        <JobDetailModal
+          application={jobDetailApp}
+          onClose={() => setJobDetailApp(null)}
+        />
+      )}
     </div>
   );
 }

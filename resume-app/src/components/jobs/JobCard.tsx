@@ -113,11 +113,13 @@ export function JobCard({ job, onDelete, onCreateApplication, hasApplication }: 
       {ats && (
         <div className="mt-4 pt-4 border-t border-gray-800">
           <div className="grid grid-cols-3 gap-3 mb-3">
-            {[
+            {([
               { label: "Keywords", score: ats.keywordScore },
               { label: "Experience", score: ats.experienceScore },
               { label: "Title Match", score: ats.titleScore },
-            ].map(({ label, score }) => (
+            ] as { label: string; score: number | undefined }[])
+              .filter(({ score }) => score !== undefined)
+              .map(({ label, score }) => (
               <div key={label} className="text-center">
                 <div className="text-sm font-semibold text-gray-200">{score}%</div>
                 <div className="text-xs text-gray-600">{label}</div>
@@ -125,9 +127,9 @@ export function JobCard({ job, onDelete, onCreateApplication, hasApplication }: 
                   <div
                     className={cn(
                       "h-full rounded-full",
-                      score >= 80 ? "bg-green-500" :
-                      score >= 60 ? "bg-yellow-500" :
-                      score >= 40 ? "bg-orange-500" : "bg-red-500"
+                      (score ?? 0) >= 80 ? "bg-green-500" :
+                      (score ?? 0) >= 60 ? "bg-yellow-500" :
+                      (score ?? 0) >= 40 ? "bg-orange-500" : "bg-red-500"
                     )}
                     style={{ width: `${score}%` }}
                   />

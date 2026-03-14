@@ -12,7 +12,7 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
-// Called by the Chrome extension — returns the authenticated user's base resume
+// Called by the Chrome extension — returns the authenticated user's profile
 export async function GET(request: NextRequest) {
   const token = extractBearerToken(request.headers.get("Authorization"));
   if (!token) {
@@ -26,20 +26,39 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
-    .from("resumes")
-    .select("content, file_name")
-    .eq("user_id", userId)
-    .eq("type", "base")
-    .order("uploaded_at", { ascending: false })
-    .limit(1)
-    .single();
+    .from("user_profiles")
+    .select("full_name, work_title, phone, linkedin, github, location, skills")
+    .eq("id", userId)
+    .maybeSingle();
 
   if (error || !data) {
-    return NextResponse.json({ error: "No resume" }, { status: 404, headers: corsHeaders });
+    return NextResponse.json({ error: "No profile" }, { status: 404, headers: corsHeaders });
   }
 
+  // Split full_name into first/last
+  const nameParts = (data.full_name || "").trim().split(/\s+/);
+  const firstName = nameParts[0] || "";
+  const lastName = nameParts.slice(1).join(" ") || "";
+
+  // Parse location into city/state (e.g. "San Francisco, CA")
+  const locationParts = (data.location || "").split(",").map((s: string) => s.trim());
+  const city = locationParts[0] || "";
+  const state = locationParts[1] || "";
+
   return NextResponse.json(
-    { content: data.content, fileName: data.file_name },
+    {
+      firstName,
+      lastName,
+      fullName: data.full_name || "",
+      workTitle: data.work_title || "",
+      phone: data.phone || "",
+      linkedin: data.linkedin || "",
+      website: data.github || "",
+      city,
+      state,
+      location: data.location || "",
+      skills: data.skills || [],
+    },
     { headers: corsHeaders }
   );
 }

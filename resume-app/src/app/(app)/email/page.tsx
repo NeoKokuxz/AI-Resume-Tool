@@ -2,36 +2,62 @@
 
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { createEmail, updateEmailInDb, deleteEmailFromDb } from "@/lib/db";
+import { createEmail, updateEmailInDb, deleteEmailFromDb, fetchAll } from "@/lib/db";
 import { Button } from "@/components/ui/Button";
 import { EmailClassification } from "@/types";
 import { Mail, Plus, Inbox } from "lucide-react";
-import { classifyEmail } from "@/lib/email-utils";
 import { EmailSummaryBar } from "@/components/email/EmailSummaryBar";
 import { EmailGroup } from "@/components/email/EmailGroup";
 import { AddEmailModal } from "@/components/email/AddEmailModal";
+import { useAIOperation } from "@/lib/ai-queue/realtime";
 
 const classificationOrder: EmailClassification[] = [
   "interview", "assessment", "recruiter_outreach", "rejection", "unknown",
 ];
 
+async function enqueueClassify(subject: string, body: string, emailId: string): Promise<string | null> {
+  const res = await fetch("/api/ai-queue/enqueue", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      operationType: "classify_email",
+      payload: { subject, body, emailId },
+    }),
+  });
+  const data = await res.json();
+  return data.operationId ?? null;
+}
+
 export default function EmailPage() {
-  const { emails, addEmail, deleteEmail, updateEmail, jobs } = useAppStore();
+  const { emails, addEmail, updateEmail, deleteEmail, jobs, hydrate } = useAppStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isClassifying, setIsClassifying] = useState(false);
   const [classifyingId, setClassifyingId] = useState<string | null>(null);
+  const [operationId, setOperationId] = useState<string | null>(null);
 
-  // Form state
+  useAIOperation({
+    operationId,
+    onSuccess: async () => {
+      const data = await fetchAll();
+      if (data) hydrate(data);
+      setOperationId(null);
+      setIsClassifying(false);
+      setClassifyingId(null);
+    },
+    onError: () => {
+      setOperationId(null);
+      setIsClassifying(false);
+      setClassifyingId(null);
+    },
+  });
+
   const [subject, setSubject] = useState("");
   const [sender, setSender] = useState("");
   const [body, setBody] = useState("");
   const [relatedJobId, setRelatedJobId] = useState("");
 
   function resetForm() {
-    setSubject("");
-    setSender("");
-    setBody("");
-    setRelatedJobId("");
+    setSubject(""); setSender(""); setBody(""); setRelatedJobId("");
   }
 
   async function handleAddEmail() {
@@ -39,30 +65,35 @@ export default function EmailPage() {
     setIsClassifying(true);
 
     try {
-      const classification = await classifyEmail(subject, body);
+      // Create email immediately with 'unknown' — queue will update classification
       const email = await createEmail({
         subject: subject || "(No subject)",
         sender: sender || "unknown@email.com",
         body,
-        classification,
+        classification: "unknown",
       });
-      if (email) addEmail(email);
+
+      if (email) {
+        addEmail(email);
+        const opId = await enqueueClassify(subject, body, email.id);
+        if (opId) setOperationId(opId);
+        else setIsClassifying(false);
+      } else {
+        setIsClassifying(false);
+      }
+
       resetForm();
       setIsModalOpen(false);
-    } finally {
+    } catch {
       setIsClassifying(false);
     }
   }
 
   async function handleReclassify(emailId: string, emailSubject: string, emailBody: string) {
     setClassifyingId(emailId);
-    try {
-      const classification = await classifyEmail(emailSubject, emailBody);
-      updateEmail(emailId, { classification });
-      updateEmailInDb(emailId, { classification });
-    } finally {
-      setClassifyingId(null);
-    }
+    const opId = await enqueueClassify(emailSubject, emailBody, emailId);
+    if (opId) setOperationId(opId);
+    else setClassifyingId(null);
   }
 
   function handleDelete(emailId: string) {
@@ -70,13 +101,8 @@ export default function EmailPage() {
     deleteEmail(emailId);
   }
 
-  // Group emails by classification
   const grouped: Record<EmailClassification, typeof emails> = {
-    interview: [],
-    assessment: [],
-    recruiter_outreach: [],
-    rejection: [],
-    unknown: [],
+    interview: [], assessment: [], recruiter_outreach: [], rejection: [], unknown: [],
   };
   emails.forEach((e) => grouped[e.classification].push(e));
 
@@ -84,11 +110,6 @@ export default function EmailPage() {
     acc[cls] = grouped[cls].length;
     return acc;
   }, {} as Record<EmailClassification, number>);
-
-  function handleCloseModal() {
-    setIsModalOpen(false);
-    resetForm();
-  }
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -137,7 +158,7 @@ export default function EmailPage() {
 
       <AddEmailModal
         isOpen={isModalOpen}
-        onClose={handleCloseModal}
+        onClose={() => { setIsModalOpen(false); resetForm(); }}
         subject={subject}
         sender={sender}
         body={body}

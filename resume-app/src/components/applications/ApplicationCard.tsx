@@ -21,6 +21,7 @@ interface ApplicationCardProps {
   isGenerating: boolean;
   onViewResume: () => void;
   onUpdateNotes: (notes: string) => void;
+  onViewDetails: () => void;
 }
 
 export function ApplicationCard({
@@ -30,6 +31,7 @@ export function ApplicationCard({
   isGenerating,
   onViewResume,
   onUpdateNotes,
+  onViewDetails,
 }: ApplicationCardProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: application.id,
@@ -47,32 +49,39 @@ export function ApplicationCard({
         isDragging && "opacity-50 border-indigo-700"
       )}
     >
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-200 leading-tight truncate">
-            {application.job.title}
-          </p>
-          <p className="text-xs text-gray-500 mt-0.5">{application.job.company}</p>
+      {/* Upper — entire section clickable */}
+      <div
+        className="mb-3 cursor-pointer group/upper"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); onViewDetails(); }}
+      >
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-200 leading-tight truncate group-hover/upper:text-indigo-300 transition-colors">
+              {application.job.title}
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">{application.job.company}</p>
+          </div>
+          {application.atsScore !== undefined && (
+            <ATSScoreRing score={application.atsScore} size="sm" showLabel={false} />
+          )}
         </div>
-        {application.atsScore !== undefined && (
-          <ATSScoreRing score={application.atsScore} size="sm" showLabel={false} />
+
+        <div className="flex items-center gap-2 text-xs text-gray-600">
+          <MapPin size={10} />
+          <span className="truncate">{application.job.location || "Unknown"}</span>
+          <span>·</span>
+          <span>{formatRelativeTime(application.appliedAt)}</span>
+        </div>
+
+        {application.notes && !showNotes && (
+          <div className="mt-2 text-xs text-gray-500 bg-gray-800/50 rounded-lg px-2.5 py-1.5 italic line-clamp-1">
+            "{application.notes}"
+          </div>
         )}
       </div>
 
-      <div className="flex items-center gap-2 text-xs text-gray-600 mb-3">
-        <MapPin size={10} />
-        <span className="truncate">{application.job.location || "Unknown"}</span>
-        <span>·</span>
-        <span>{formatRelativeTime(application.appliedAt)}</span>
-      </div>
-
-      {/* Notes */}
-      {application.notes && !showNotes && (
-        <div className="mb-2 text-xs text-gray-500 bg-gray-800/50 rounded-lg px-2.5 py-1.5 italic line-clamp-1">
-          "{application.notes}"
-        </div>
-      )}
-
+      {/* Notes textarea — not part of clickable upper */}
       {showNotes && (
         <div
           className="mb-2"

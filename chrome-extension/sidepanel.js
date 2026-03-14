@@ -1,4 +1,210 @@
 const WEB_APP_URL = "http://localhost:3000";
+const SUPABASE_URL = "https://ybozvcxbcuowwaldwzjy.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_pIjQLlJoKX9ubm_jMPs0ww_H2VuT5GU";
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
+let currentSession = null;
+
+async function loadStoredSession() {
+  return new Promise(resolve => {
+    chrome.storage.local.get("supabaseSession", data => {
+      resolve(data.supabaseSession || null);
+    });
+  });
+}
+
+async function storeSession(session) {
+  await chrome.storage.local.set({ supabaseSession: session });
+}
+
+async function clearStoredSession() {
+  await chrome.storage.local.remove("supabaseSession");
+}
+
+async function refreshAccessToken(refreshToken) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const session = {
+    access_token: data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at: Date.now() + data.expires_in * 1000,
+    email: data.user?.email || "",
+  };
+  await storeSession(session);
+  return session;
+}
+
+async function getValidSession() {
+  if (!currentSession) return null;
+  // Refresh if expires within 60 seconds
+  if (Date.now() > currentSession.expires_at - 60_000) {
+    currentSession = await refreshAccessToken(currentSession.refresh_token);
+  }
+  return currentSession;
+}
+
+async function signIn(email, password) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error_description || data.msg || "Login failed");
+  const session = {
+    access_token: data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at: Date.now() + data.expires_in * 1000,
+    email: data.user?.email || email,
+  };
+  await storeSession(session);
+  return session;
+}
+
+async function signOut() {
+  currentSession = null;
+  await clearStoredSession();
+}
+
+// Authenticated fetch — injects Bearer token on all web app requests
+async function authFetch(url, options = {}) {
+  const session = await getValidSession();
+  if (!session) throw new Error("Not signed in");
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      "Authorization": `Bearer ${session.access_token}`,
+    },
+  });
+}
+
+function getInitials(name) {
+  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function populateProfile(profile) {
+  if (!profile) return;
+  const initials = getInitials(profile.fullName);
+  const name = profile.fullName || profile.email || "—";
+  const title = profile.workTitle || "";
+  const skills = (profile.skills || []).slice(0, 4);
+
+  // Profile card (compact, always visible)
+  document.getElementById("profile-avatar").textContent = initials;
+  document.getElementById("profile-name").textContent = name;
+  document.getElementById("profile-title").textContent = title;
+  const skillsEl = document.getElementById("profile-skills");
+  skillsEl.innerHTML = skills.map(s => `<span class="profile-skill-tag">${esc(s)}</span>`).join("");
+
+  // Settings overlay (full detail)
+  document.getElementById("settings-avatar").textContent = initials;
+  document.getElementById("settings-name").textContent = name;
+  document.getElementById("settings-title").textContent = title;
+
+  if (profile.location) {
+    document.getElementById("settings-location").style.display = "flex";
+    document.getElementById("settings-location-text").textContent = profile.location;
+  }
+
+  if (profile.linkedin) {
+    document.getElementById("settings-linkedin-row").style.display = "flex";
+    const a = document.getElementById("settings-linkedin");
+    a.href = profile.linkedin;
+    a.textContent = profile.linkedin.replace(/^https?:\/\/(www\.)?/i, "");
+  }
+
+  const settingsSkills = document.getElementById("settings-skills");
+  settingsSkills.innerHTML = (profile.skills || []).map(s =>
+    `<span class="settings-skill-tag">${esc(s)}</span>`
+  ).join("");
+}
+
+function showLoginOverlay() {
+  document.getElementById("login-overlay").classList.add("open");
+  document.getElementById("profile-card").classList.remove("visible");
+}
+
+async function showMainUI(email) {
+  document.getElementById("login-overlay").classList.remove("open");
+  document.getElementById("profile-card").classList.add("visible");
+  document.getElementById("profile-name").textContent = email;
+
+  // Fetch and display full profile
+  try {
+    const res = await authFetch(`${WEB_APP_URL}/api/profile`);
+    if (res.ok) {
+      const profile = await res.json();
+      userProfile = profile;
+      populateProfile({ ...profile, email });
+    }
+  } catch (_) {}
+}
+
+// ─── Auth UI ─────────────────────────────────────────────────────────────────
+document.getElementById("btn-login").addEventListener("click", async () => {
+  const email = document.getElementById("login-email").value.trim();
+  const password = document.getElementById("login-password").value;
+  const errorEl = document.getElementById("login-error");
+  const btn = document.getElementById("btn-login");
+
+  if (!email || !password) {
+    errorEl.textContent = "Please enter your email and password.";
+    errorEl.classList.add("visible");
+    return;
+  }
+
+  errorEl.classList.remove("visible");
+  btn.disabled = true;
+  btn.textContent = "Signing in...";
+
+  try {
+    currentSession = await signIn(email, password);
+    await showMainUI(currentSession.email);
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.classList.add("visible");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Sign In";
+  }
+});
+
+document.getElementById("login-password").addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("btn-login").click();
+});
+
+document.getElementById("btn-logout").addEventListener("click", async () => {
+  await signOut();
+  showLoginOverlay();
+  startOver();
+});
+
+// ─── Init: restore session ────────────────────────────────────────────────────
+(async () => {
+  currentSession = await loadStoredSession();
+  if (currentSession) {
+    // Try refreshing if close to expiry
+    if (Date.now() > currentSession.expires_at - 60_000) {
+      currentSession = await refreshAccessToken(currentSession.refresh_token);
+    }
+    if (currentSession) {
+      await showMainUI(currentSession.email);
+    } else {
+      showLoginOverlay();
+    }
+  } else {
+    showLoginOverlay();
+  }
+})();
 
 // ─── State ─────────────────────────────────────────────────────────────────
 let currentStep = 1;
@@ -7,6 +213,7 @@ let tailoredResume = "";
 let coverLetter = "";
 let resumeBlobUrl = null;
 let appliedTab = null;
+let currentApplicationId = null;
 
 // ─── Settings ───────────────────────────────────────────────────────────────
 const DEFAULT_SETTINGS = { autoScan: false, autoApply: false, autoFill: false };
@@ -37,21 +244,8 @@ loadSettings();
   });
 });
 
-// ─── Mock profile (replace with resume data once step 2 is re-enabled) ─────
-const MOCK_PROFILE = {
-  firstName:    "Naoki",
-  lastName:     "Doe",
-  email:        "naoki@example.com",
-  phone:        "4155551234",
-  linkedin:     "https://linkedin.com/in/naoki",
-  website:      "https://naoki.dev",
-  addressLine1: "123 Main St",
-  addressLine2: "",
-  city:         "San Francisco",
-  state:        "CA",
-  zip:          "94105",
-  country:      "United States",
-};
+// ─── Profile (fetched from resume app in step 2) ─────────────────────────────
+let userProfile = null;
 
 // ─── Settings overlay ───────────────────────────────────────────────────────
 document.getElementById("btn-gear").addEventListener("click", () => {
@@ -62,6 +256,7 @@ document.getElementById("btn-close-settings").addEventListener("click", () => {
   document.getElementById("settings-overlay").classList.remove("open");
   document.getElementById("btn-gear").classList.remove("active");
 });
+
 
 // ─── Tab switching ──────────────────────────────────────────────────────────
 document.querySelectorAll(".tab").forEach((tab) => {
@@ -133,6 +328,7 @@ function startOver() {
   scannedJob = null;
   tailoredResume = "";
   coverLetter = "";
+  currentApplicationId = null;
   if (resumeBlobUrl) { URL.revokeObjectURL(resumeBlobUrl); resumeBlobUrl = null; }
   document.getElementById("scan-result").innerHTML = "";
   document.getElementById("tailor-result").innerHTML = "";
@@ -165,88 +361,191 @@ document.getElementById("btn-scan").addEventListener("click", async () => {
     if (!result) throw new Error(results[0]?.result?.error || "No job found. Make sure you are on a LinkedIn job listing.");
 
     scannedJob = result.job;
-    const skills = extractJobSkills(scannedJob.description);
-    const skillsHtml = skills.length
-      ? skills.map(s => `<span class="skill-tag">${esc(s)}</span>`).join("")
-      : `<span style="color:#6b7280;font-size:11px">None detected</span>`;
 
-    resultEl.innerHTML = `
-      <div class="job-card">
-        <div class="job-title">${esc(scannedJob.title) || "Unknown Title"}</div>
-        <div class="job-meta">${esc(scannedJob.company)}${scannedJob.location ? " · " + esc(scannedJob.location) : ""}</div>
-        ${scannedJob.salary || scannedJob.jobType || scannedJob.workplace ? `
-        <div class="job-badges">
-          ${scannedJob.salary    ? `<span class="job-badge badge-pay">${esc(scannedJob.salary)}</span>` : ""}
-          ${scannedJob.jobType   ? `<span class="job-badge badge-type">${esc(scannedJob.jobType)}</span>` : ""}
-          ${scannedJob.workplace ? `<span class="job-badge badge-place">${esc(scannedJob.workplace)}</span>` : ""}
-        </div>` : ""}
+    // Render job card immediately with a loading spinner for the ATS score
+    renderJobCard(resultEl, scannedJob, null);
 
-        <div class="job-section-label">Skills Required</div>
-        <div class="skill-tags">${skillsHtml}</div>
+    document.getElementById("btn-tailor").addEventListener("click", () => goToStep2());
+    if (scannedJob.description.length > 300) attachDescToggle();
+    if (settings.autoScan) setTimeout(() => goToStep2(), 800);
 
-        <div class="job-section-label" style="margin-top:10px">Description</div>
-        <div class="job-desc-preview" id="desc-preview">
-          ${esc(scannedJob.description.slice(0, 300))}${scannedJob.description.length > 300 ? "…" : ""}
-        </div>
-        ${scannedJob.description.length > 300
-          ? `<button class="btn-link" id="btn-desc-toggle">Show more</button>
-             <div class="job-desc-full hidden" id="desc-full">${esc(scannedJob.description)}</div>`
-          : ""}
-      </div>
-      <button class="btn primary" id="btn-tailor" style="margin-top:10px">Tailor Resume →</button>
-    `;
-
-    if (scannedJob.description.length > 300) {
-      document.getElementById("btn-desc-toggle").addEventListener("click", () => {
-        const full = document.getElementById("desc-full");
-        const preview = document.getElementById("desc-preview");
-        const btn = document.getElementById("btn-desc-toggle");
-        const expanded = !full.classList.contains("hidden");
-        full.classList.toggle("hidden", expanded);
-        preview.classList.toggle("hidden", !expanded);
-        btn.textContent = expanded ? "Show more" : "Show less";
+    // Fetch ATS score in background — update card when ready
+    try {
+      const atsRes = await authFetch(`${WEB_APP_URL}/api/ats-score`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobDescription: scannedJob.description }),
       });
-    }
-
-    document.getElementById("btn-tailor").addEventListener("click", () => {
-      goToStep2();
-    });
-
-    // Automation chain after scan
-    if (settings.autoScan) {
-      setTimeout(() => goToStep2(), 800);
-    }
+      if (atsRes.ok) {
+        const atsResult = await atsRes.json();
+        scannedJob.atsResult = atsResult;
+        renderJobCard(resultEl, scannedJob, atsResult);
+        document.getElementById("btn-tailor").addEventListener("click", () => goToStep2());
+        if (scannedJob.description.length > 300) attachDescToggle();
+      }
+    } catch (_) {}
 
   } catch (err) {
     setMsg(resultEl, "error", err.message);
   }
 });
 
+function scoreColor(score) {
+  if (score >= 75) return "#22c55e";
+  if (score >= 50) return "#f59e0b";
+  return "#ef4444";
+}
+
+function atsRingHtml(atsResult) {
+  if (!atsResult) {
+    return `<div class="ats-ring-loading"><span class="spinner" style="margin:0"></span></div>`;
+  }
+  const score = atsResult.score;
+  const color = scoreColor(score);
+  const r = 20;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (score / 100) * circ;
+  return `
+    <div class="ats-ring-wrap">
+      <svg width="52" height="52" viewBox="0 0 52 52">
+        <circle class="ats-ring-bg" cx="26" cy="26" r="${r}"/>
+        <circle class="ats-ring-fill" cx="26" cy="26" r="${r}"
+          stroke="${color}"
+          stroke-dasharray="${circ}"
+          stroke-dashoffset="${offset}"/>
+      </svg>
+      <div class="ats-ring-label">
+        <span class="ats-ring-score" style="color:${color}">${score}</span>
+        <span class="ats-ring-pct">ATS</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderJobCard(resultEl, job, atsResult) {
+  const skills = extractJobSkills(job.description);
+
+  let keywordsHtml = "";
+  if (atsResult) {
+    const matched = (atsResult.matchedKeywords || []).slice(0, 8);
+    const missing = (atsResult.missingKeywords || []).slice(0, 6);
+    keywordsHtml = `
+      <div class="keyword-section">
+        ${atsResult.summary ? `<div style="font-size:11px;color:#9ca3af;line-height:1.5;margin-bottom:6px">${esc(atsResult.summary)}</div>` : ""}
+        <div class="keyword-row">
+          ${matched.map(k => `<span class="kw-match">✓ ${esc(k)}</span>`).join("")}
+          ${missing.map(k => `<span class="kw-miss">✗ ${esc(k)}</span>`).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  const skillsHtml = skills.length
+    ? skills.map(s => `<span class="skill-tag">${esc(s)}</span>`).join("")
+    : `<span style="color:#6b7280;font-size:11px">None detected</span>`;
+
+  resultEl.innerHTML = `
+    <div class="job-card" style="position:relative">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div style="min-width:0;flex:1">
+          <div class="job-title">${esc(job.title) || "Unknown Title"}</div>
+          <div class="job-meta">${esc(job.company)}${job.location ? " · " + esc(job.location) : ""}</div>
+        </div>
+        ${atsRingHtml(atsResult)}
+      </div>
+
+      ${job.salary || job.jobType || job.workplace ? `
+      <div class="job-badges" style="margin-top:8px">
+        ${job.salary    ? `<span class="job-badge badge-pay">${esc(job.salary)}</span>` : ""}
+        ${job.jobType   ? `<span class="job-badge badge-type">${esc(job.jobType)}</span>` : ""}
+        ${job.workplace ? `<span class="job-badge badge-place">${esc(job.workplace)}</span>` : ""}
+      </div>` : ""}
+
+      ${keywordsHtml}
+
+      <div class="job-section-label" style="margin-top:10px">Skills Required</div>
+      <div class="skill-tags">${skillsHtml}</div>
+
+      <div class="job-section-label" style="margin-top:10px">Description</div>
+      <div class="job-desc-preview" id="desc-preview">
+        ${esc(job.description.slice(0, 300))}${job.description.length > 300 ? "…" : ""}
+      </div>
+      ${job.description.length > 300
+        ? `<button class="btn-link" id="btn-desc-toggle">Show more</button>
+           <div class="job-desc-full hidden" id="desc-full">${esc(job.description)}</div>`
+        : ""}
+    </div>
+    <button class="btn primary" id="btn-tailor" style="margin-top:10px;display:flex;align-items:center;justify-content:center;gap:7px">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      Tailor Resume for This Job
+    </button>
+  `;
+}
+
+function attachDescToggle() {
+  const btn = document.getElementById("btn-desc-toggle");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    const full = document.getElementById("desc-full");
+    const preview = document.getElementById("desc-preview");
+    const expanded = !full.classList.contains("hidden");
+    full.classList.toggle("hidden", expanded);
+    preview.classList.toggle("hidden", !expanded);
+    btn.textContent = expanded ? "Show more" : "Show less";
+  });
+}
+
 // ─── Step 2: Tailor Resume ──────────────────────────────────────────────────
 async function goToStep2() {
   showStep(2);
   const resultEl = document.getElementById("tailor-result");
-  resultEl.innerHTML = `<div class="msg info"><span class="spinner"></span>Fetching your resume...</div>`;
+  resultEl.innerHTML = `<div class="msg info"><span class="spinner"></span>Saving job & fetching resume...</div>`;
 
-  let baseResume, fileName;
+  let baseResume, applicationId;
   try {
-    const resumeRes = await fetch(`${WEB_APP_URL}/api/resume`);
+    const [resumeRes, importRes] = await Promise.all([
+      authFetch(`${WEB_APP_URL}/api/resume`),
+      authFetch(`${WEB_APP_URL}/api/jobs/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...scannedJob, atsResult: scannedJob.atsResult ?? null }),
+      }),
+    ]);
+
     if (!resumeRes.ok) {
-      resultEl.innerHTML = `<div class="msg error">No resume found. Please <a href="${WEB_APP_URL}/resume" target="_blank" style="color:#a5b4fc">upload your resume</a> in the web app first, then come back and try again.</div>`;
+      resultEl.innerHTML = `<div class="msg error">No resume found. Please <a href="${WEB_APP_URL}/resume" target="_blank" style="color:#a5b4fc">upload your resume</a> in the web app first.</div>`;
       return;
     }
-    const resumeData = await resumeRes.json();
-    baseResume = resumeData.content;
-    fileName = resumeData.fileName;
+    baseResume = (await resumeRes.json()).content;
+
+    if (importRes.ok) {
+      applicationId = (await importRes.json()).applicationId;
+      currentApplicationId = applicationId;
+    }
   } catch (err) {
     resultEl.innerHTML = `<div class="msg error">Could not reach the web app. Make sure it is running at ${esc(WEB_APP_URL)}.</div>`;
     return;
   }
 
-  resultEl.innerHTML = `<div class="msg info"><span class="spinner"></span>Tailoring resume with AI — this may take 15–30 seconds...</div>`;
+  // Show job-saved confirmation + tailoring spinner
+  const ats = scannedJob.atsResult;
+  const savedBadge = `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#0a1628;border:1px solid #1d4ed8;border-radius:8px;margin-bottom:10px">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:#93c5fd">✓ Saved to tracker</div>
+        <div style="font-size:11px;color:#4b5563;margin-top:1px">${esc(scannedJob.title)} · ${esc(scannedJob.company)}</div>
+      </div>
+      ${ats ? `<div style="text-align:center;flex-shrink:0">
+        <div style="font-size:15px;font-weight:700;color:${scoreColor(ats.score)}">${ats.score}</div>
+        <div style="font-size:9px;color:#6b7280">ATS</div>
+      </div>` : ""}
+    </div>
+  `;
+
+  resultEl.innerHTML = savedBadge + `<div class="msg info"><span class="spinner"></span>Tailoring resume with AI — this may take 15–30 seconds...</div>`;
 
   try {
-    const genRes = await fetch(`${WEB_APP_URL}/api/generate-resume`, {
+    const genRes = await authFetch(`${WEB_APP_URL}/api/generate-resume`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -254,6 +553,7 @@ async function goToStep2() {
         jobDescription: scannedJob.description,
         jobTitle: scannedJob.title,
         company: scannedJob.company,
+        applicationId,
       }),
     });
 
@@ -262,14 +562,11 @@ async function goToStep2() {
     tailoredResume = data.tailoredResume || "";
     coverLetter = data.coverLetter || "";
 
-    // Also save job to tracker (fire-and-forget)
-    postJob(scannedJob).catch(() => {});
-
-    // Generate PDF blob URL; fall back to plain-text blob if PDF endpoint fails
+    // Generate PDF; fall back to plain text
     if (resumeBlobUrl) URL.revokeObjectURL(resumeBlobUrl);
     let downloadFileName = "tailored-resume.txt";
     try {
-      const pdfRes = await fetch(`${WEB_APP_URL}/api/generate-pdf`, {
+      const pdfRes = await authFetch(`${WEB_APP_URL}/api/generate-pdf`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: tailoredResume, fileName: "tailored-resume" }),
@@ -283,17 +580,19 @@ async function goToStep2() {
       resumeBlobUrl = URL.createObjectURL(new Blob([tailoredResume], { type: "text/plain" }));
     }
 
-    resultEl.innerHTML = `
-      <div class="msg success" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-        <span>Resume tailored successfully!</span>
+    resultEl.innerHTML = savedBadge + `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#052e16;border:1px solid #14532d;border-radius:8px;margin-bottom:10px;gap:8px">
+        <span style="font-size:12px;font-weight:600;color:#86efac">✓ Resume tailored</span>
         <a href="${resumeBlobUrl}" download="${downloadFileName}" style="flex-shrink:0;font-size:12px;color:#a5b4fc;text-decoration:none;padding:4px 10px;background:#1e1b4b;border:1px solid #3730a3;border-radius:6px">⬇ ${downloadFileName.endsWith(".pdf") ? "PDF" : "TXT"}</a>
       </div>
       ${collapsible("Tailored Resume", tailoredResume, "resume-preview")}
       ${collapsible("Cover Letter", coverLetter, "cl-preview")}
-      <button class="btn primary" id="btn-go-apply" style="margin-top:12px">Continue to Apply →</button>
+      <button class="btn primary" id="btn-go-apply" style="margin-top:12px;display:flex;align-items:center;justify-content:center;gap:7px">
+        Proceed to Apply
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
     `;
 
-    // Attach collapsible toggles
     document.querySelectorAll(".collapsible-header").forEach(h => {
       h.addEventListener("click", () => {
         h.nextElementSibling.classList.toggle("open");
@@ -302,21 +601,34 @@ async function goToStep2() {
       });
     });
 
-    document.getElementById("btn-go-apply").addEventListener("click", () => {
+    document.getElementById("btn-go-apply").addEventListener("click", async () => {
+      if (currentApplicationId) {
+        authFetch(`${WEB_APP_URL}/api/applications/update`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ applicationId: currentApplicationId, status: "applied" }),
+        }).catch(() => {});
+      }
       showStep(3);
       if (settings.autoApply) triggerApplyFlow(settings.autoFill);
     });
 
-    // Auto-chain if autoApply is on
     if (settings.autoApply) {
-      setTimeout(() => {
+      setTimeout(async () => {
+        if (currentApplicationId) {
+          authFetch(`${WEB_APP_URL}/api/applications/update`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ applicationId: currentApplicationId, status: "applied" }),
+          }).catch(() => {});
+        }
         showStep(3);
         triggerApplyFlow(settings.autoFill);
       }, 1500);
     }
 
   } catch (err) {
-    resultEl.innerHTML = `<div class="msg error">${esc(err.message)}</div>`;
+    resultEl.innerHTML = savedBadge + `<div class="msg error">${esc(err.message)}</div>`;
   }
 }
 
@@ -355,8 +667,14 @@ async function triggerApplyFlow(shouldFill) {
     } else {
       fillEl.innerHTML = `<div class="msg success" style="margin-top:10px">Application page opened! Click Fill Fields when ready.</div>`;
       actionsEl.innerHTML = `
-        <button class="btn primary" id="btn-fill-now" style="margin-top:10px">Fill Fields</button>
-        <button class="btn" id="btn-restart-after-open" style="margin-top:8px;width:100%">↩ Re-start</button>
+        <button class="btn primary" id="btn-fill-now" style="margin-top:10px;display:flex;align-items:center;justify-content:center;gap:7px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Fill in My Details
+        </button>
+        <button class="btn secondary" id="btn-restart-after-open" style="margin-top:8px;display:flex;align-items:center;justify-content:center;gap:6px">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Start Over
+        </button>
       `;
       document.getElementById("btn-fill-now").addEventListener("click", async () => {
         document.getElementById("btn-fill-now").disabled = true;
@@ -378,7 +696,7 @@ async function doFill(fillEl, actionsEl) {
   const results = await chrome.scripting.executeScript({
     target: { tabId: appliedTab.id, allFrames: true },
     func: fillApplicationForm,
-    args: [MOCK_PROFILE, tailoredResume || null],
+    args: [userProfile || {}, tailoredResume || null],
   });
   const fillResult = results.find(r => r?.result?.results?.some(f => f.filled))?.result
     || results[0]?.result;
@@ -400,13 +718,19 @@ function showFillResult(fillEl, actionsEl, fillResult) {
   fillEl.innerHTML = `<div style="margin-top:10px">${items}</div>`;
 
   actionsEl.innerHTML = `
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <button class="btn primary" id="btn-reapply" style="flex:1">↺ Re-apply</button>
-      <button class="btn" id="btn-restart-from3" style="flex:1">↩ Re-start</button>
+    <div class="btn-pair">
+      <button class="btn secondary" id="btn-reapply" style="gap:6px">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+        Re-fill Fields
+      </button>
+      <button class="btn secondary" id="btn-restart-from3" style="gap:6px">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        Start Over
+      </button>
     </div>
-    <a href="${WEB_APP_URL}/applications" target="_blank" class="btn" style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;background:#1e3a5f;border:1px solid #1d4ed8;color:#93c5fd;text-decoration:none">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="#93c5fd" stroke-width="1.5"/><path d="M5 3V2M11 3V2M2 7h12" stroke="#93c5fd" stroke-width="1.5" stroke-linecap="round"/></svg>
-      View in Tracker
+    <a href="${WEB_APP_URL}/applications" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:7px;margin-top:8px;padding:9px 14px;background:#0f1f3d;border:1px solid #1e40af;border-radius:8px;color:#93c5fd;text-decoration:none;font-size:13px;font-weight:500;transition:background 0.15s" onmouseover="this.style.background='#1e3a5f'" onmouseout="this.style.background='#0f1f3d'">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="#93c5fd" stroke-width="1.5"/><path d="M5 3V2M11 3V2M2 7h12" stroke="#93c5fd" stroke-width="1.5" stroke-linecap="round"/></svg>
+      View Application in Tracker
     </a>
   `;
 
@@ -420,7 +744,7 @@ function showFillResult(fillEl, actionsEl, fillResult) {
     } catch (err) {
       setMsg(fillEl, "error", err.message);
       btn.disabled = false;
-      btn.textContent = "↺ Re-apply";
+      btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg> Re-fill Fields`;
     }
   });
 
@@ -477,13 +801,18 @@ sendBtn.addEventListener("click", async () => {
   sendBtn.disabled = true;
 
   try {
-    await postJob({
-      title:       document.getElementById("manual-title").value.trim(),
-      company:     document.getElementById("manual-company").value.trim(),
-      description: descEl.value.trim(),
-      location:    "",
+    const res = await authFetch(`${WEB_APP_URL}/api/jobs/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title:       document.getElementById("manual-title").value.trim(),
+        company:     document.getElementById("manual-company").value.trim(),
+        description: descEl.value.trim(),
+        location:    "",
+      }),
     });
-    setMsg(resultEl, "success", "Sent! Job will appear in the web app within 5 seconds.");
+    if (!res.ok) throw new Error(`Server error: ${res.status}`);
+    setMsg(resultEl, "success", "Job saved to tracker!");
     descEl.value = "";
     document.getElementById("manual-title").value = "";
     document.getElementById("manual-company").value = "";
@@ -495,15 +824,6 @@ sendBtn.addEventListener("click", async () => {
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-async function postJob(job) {
-  const res = await fetch(`${WEB_APP_URL}/api/jobs/import`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(job),
-  });
-  if (!res.ok) throw new Error(`Server error: ${res.status}`);
-}
-
 function setMsg(el, type, text) {
   el.innerHTML = `<div class="msg ${type}">${text}</div>`;
 }

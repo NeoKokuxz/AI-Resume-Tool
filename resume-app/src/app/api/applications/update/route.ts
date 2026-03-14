@@ -4,7 +4,7 @@ import { getUserIdFromToken, extractBearerToken } from "@/lib/ai-queue/auth";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Methods": "PATCH, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
@@ -12,9 +12,8 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
-// Called by the Chrome extension — returns the authenticated user's base resume
-export async function GET(request: NextRequest) {
-  const token = extractBearerToken(request.headers.get("Authorization"));
+export async function PATCH(req: NextRequest) {
+  const token = extractBearerToken(req.headers.get("Authorization"));
   if (!token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
   }
@@ -24,22 +23,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
   }
 
-  const supabase = createServiceRoleClient();
-  const { data, error } = await supabase
-    .from("resumes")
-    .select("content, file_name")
-    .eq("user_id", userId)
-    .eq("type", "base")
-    .order("uploaded_at", { ascending: false })
-    .limit(1)
-    .single();
-
-  if (error || !data) {
-    return NextResponse.json({ error: "No resume" }, { status: 404, headers: corsHeaders });
+  const { applicationId, status } = await req.json();
+  if (!applicationId || !status) {
+    return NextResponse.json({ error: "applicationId and status required" }, { status: 400, headers: corsHeaders });
   }
 
-  return NextResponse.json(
-    { content: data.content, fileName: data.file_name },
-    { headers: corsHeaders }
-  );
+  const supabase = createServiceRoleClient();
+  const { error } = await supabase
+    .from("applications")
+    .update({ status })
+    .eq("id", applicationId)
+    .eq("user_id", userId);
+
+  if (error) {
+    return NextResponse.json({ error: "Failed to update application" }, { status: 500, headers: corsHeaders });
+  }
+
+  return NextResponse.json({ ok: true }, { headers: corsHeaders });
 }

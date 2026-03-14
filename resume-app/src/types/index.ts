@@ -14,6 +14,14 @@ export type EmailClassification =
   | "recruiter_outreach"
   | "unknown";
 
+export type AIOperationType =
+  | "extract_resume"
+  | "analyze_job"
+  | "generate_resume"
+  | "classify_email";
+
+export type AIOperationStatus = "processing" | "done" | "failed";
+
 export interface Resume {
   id: string;
   fileName: string;
@@ -24,11 +32,12 @@ export interface Resume {
 
 export interface ATSResult {
   score: number;
-  keywordScore: number;
-  experienceScore: number;
-  titleScore: number;
+  keywordScore?: number;
+  experienceScore?: number;
+  titleScore?: number;
   matchedKeywords: string[];
   missingKeywords: string[];
+  summary?: string;
 }
 
 export interface Job {
@@ -38,6 +47,9 @@ export interface Job {
   description: string;
   location: string;
   url?: string;
+  salary?: string;
+  jobType?: string;
+  workplace?: string;
   atsResult?: ATSResult;
   addedAt: string;
 }
