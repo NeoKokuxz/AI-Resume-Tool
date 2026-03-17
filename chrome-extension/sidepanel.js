@@ -501,22 +501,13 @@ async function goToStep2() {
   const resultEl = document.getElementById("tailor-result");
   resultEl.innerHTML = `<div class="msg info"><span class="spinner"></span>Saving job & fetching resume...</div>`;
 
-  let baseResume, applicationId;
+  let applicationId;
   try {
-    const [resumeRes, importRes] = await Promise.all([
-      authFetch(`${WEB_APP_URL}/api/resume`),
-      authFetch(`${WEB_APP_URL}/api/jobs/import`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...scannedJob, atsResult: scannedJob.atsResult ?? null }),
-      }),
-    ]);
-
-    if (!resumeRes.ok) {
-      resultEl.innerHTML = `<div class="msg error">No resume found. Please <a href="${WEB_APP_URL}/resume" target="_blank" style="color:#a5b4fc">upload your resume</a> in the web app first.</div>`;
-      return;
-    }
-    baseResume = (await resumeRes.json()).content;
+    const importRes = await authFetch(`${WEB_APP_URL}/api/jobs/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...scannedJob, atsResult: scannedJob.atsResult ?? null }),
+    });
 
     if (importRes.ok) {
       applicationId = (await importRes.json()).applicationId;
@@ -549,7 +540,6 @@ async function goToStep2() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        baseResume,
         jobDescription: scannedJob.description,
         jobTitle: scannedJob.title,
         company: scannedJob.company,
@@ -562,22 +552,27 @@ async function goToStep2() {
     tailoredResume = data.tailoredResume || "";
     coverLetter = data.coverLetter || "";
 
-    // Generate PDF; fall back to plain text
+    // Use the tailored PDF returned from the server, or fall back to generating one
     if (resumeBlobUrl) URL.revokeObjectURL(resumeBlobUrl);
-    let downloadFileName = "tailored-resume.txt";
-    try {
-      const pdfRes = await authFetch(`${WEB_APP_URL}/api/generate-pdf`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: tailoredResume, fileName: "tailored-resume" }),
-      });
-      if (pdfRes.ok) {
-        resumeBlobUrl = URL.createObjectURL(await pdfRes.blob());
-        downloadFileName = "tailored-resume.pdf";
+    let downloadFileName = "tailored-resume.pdf";
+    if (data.pdfBase64) {
+      const bytes = Uint8Array.from(atob(data.pdfBase64), c => c.charCodeAt(0));
+      resumeBlobUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    } else {
+      try {
+        const pdfRes = await authFetch(`${WEB_APP_URL}/api/generate-pdf`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: tailoredResume, fileName: "tailored-resume" }),
+        });
+        if (pdfRes.ok) {
+          resumeBlobUrl = URL.createObjectURL(await pdfRes.blob());
+        }
+      } catch (_) {}
+      if (!resumeBlobUrl) {
+        resumeBlobUrl = URL.createObjectURL(new Blob([tailoredResume], { type: "text/plain" }));
+        downloadFileName = "tailored-resume.txt";
       }
-    } catch (_) {}
-    if (!resumeBlobUrl) {
-      resumeBlobUrl = URL.createObjectURL(new Blob([tailoredResume], { type: "text/plain" }));
     }
 
     resultEl.innerHTML = savedBadge + `

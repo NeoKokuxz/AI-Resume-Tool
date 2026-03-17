@@ -25,15 +25,16 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isAuthPage = pathname.startsWith("/login");
   const isOnboardingPage = pathname.startsWith("/onboarding");
+  const isLandingPage = pathname === "/";
 
-  if (!user && !isAuthPage && !isOnboardingPage) {
+  if (!user && !isAuthPage && !isOnboardingPage && !isLandingPage) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
   if (!user && isOnboardingPage) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
   if (user && isAuthPage) {
-    return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   return response;
@@ -41,6 +42,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/jobs/import|api/resume|api/generate-resume|api/generate-pdf|api/analyze-job|api/classify-email).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/jobs/import|api/resume|api/generate-resume|api/generate-pdf|api/analyze-job|api/classify-email|api/ai-worker).*)",
   ],
 };

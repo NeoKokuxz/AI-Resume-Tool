@@ -19,7 +19,7 @@ import { useEffect, useState } from "react";
 import { fetchUserProfile } from "@/lib/db";
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/resume", label: "My Resume", icon: FileText },
   { href: "/jobs", label: "Job Listings", icon: Briefcase },
   { href: "/applications", label: "Applications", icon: KanbanSquare },

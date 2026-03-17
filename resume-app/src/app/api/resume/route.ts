@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("resumes")
-    .select("content, file_name")
+    .select("content, file_name, pdf_storage_path")
     .eq("user_id", userId)
     .eq("type", "base")
     .order("uploaded_at", { ascending: false })
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json(
-    { content: data.content, fileName: data.file_name },
+    { content: data.content, fileName: data.file_name, pdfStoragePath: data.pdf_storage_path ?? null },
     { headers: corsHeaders }
   );
 }

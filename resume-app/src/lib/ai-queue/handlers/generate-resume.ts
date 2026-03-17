@@ -1,50 +1,26 @@
-import { geminiFlash } from "@/lib/gemini";
+import { tailorResume } from "@/lib/resume-tailor";
+import { generateTailoredPDF, generatePDFBytes } from "@/lib/pdf-utils";
 import type { HandlerContext } from "./types";
 
+const RESUME_BUCKET = "resume-pdfs";
+
 export async function handleGenerateResume({ payload, userId, supabase }: HandlerContext) {
-  const { baseResume, jobDescription, jobTitle, company, applicationId } = payload as {
+  const { baseResume, jobDescription, jobTitle, company, applicationId, basePdfStoragePath } = payload as {
     baseResume: string;
     jobDescription: string;
     jobTitle: string;
     company: string;
     applicationId: string;
+    basePdfStoragePath?: string;
   };
 
-  const resumePrompt = `You are an expert resume writer. Tailor the following resume to match the job description.
-Keep the same structure and format. Emphasize relevant skills and experience. Do not fabricate experience.
-
-Job Title: ${jobTitle || "Unknown"}
-Company: ${company || "Unknown"}
-
-Job Description:
-${jobDescription.slice(0, 3000)}
-
-Base Resume:
-${baseResume.slice(0, 4000)}
-
-Return ONLY the tailored resume text, no commentary, no markdown headers.`;
-
-  const coverLetterPrompt = `Write a concise, professional cover letter for this job application.
-3 paragraphs max. No placeholders — write naturally even without personal details.
-
-Job Title: ${jobTitle || "the position"}
-Company: ${company || "the company"}
-
-Job Description:
-${jobDescription.slice(0, 2000)}
-
-Resume Summary:
-${baseResume.slice(0, 1500)}
-
-Return ONLY the cover letter text.`;
-
-  const [resumeResult, coverResult] = await Promise.all([
-    geminiFlash.generateContent(resumePrompt),
-    geminiFlash.generateContent(coverLetterPrompt),
+  // Tailor resume + download base PDF in parallel
+  const [{ tailoredResume, coverLetter, tailoredSections }, baseBlob] = await Promise.all([
+    tailorResume({ baseResume, jobDescription, jobTitle, company }),
+    basePdfStoragePath
+      ? supabase.storage.from(RESUME_BUCKET).download(basePdfStoragePath).then(r => r.data)
+      : Promise.resolve(null),
   ]);
-
-  const tailoredResume = resumeResult.response.text().trim();
-  const coverLetter = coverResult.response.text().trim();
 
   const { data: resumeData } = await supabase
     .from("resumes")
@@ -57,6 +33,28 @@ Return ONLY the cover letter text.`;
     })
     .select("id")
     .single();
+
+  if (resumeData?.id) {
+    try {
+      let pdfBytes: Uint8Array;
+      if (baseBlob) {
+        pdfBytes = await generateTailoredPDF(tailoredSections, await baseBlob.arrayBuffer());
+      } else {
+        pdfBytes = await generatePDFBytes(tailoredResume, { fitToOnePage: true });
+      }
+
+      const pdfPath = `${userId}/tailored-${resumeData.id}.pdf`;
+      const { error } = await supabase.storage
+        .from(RESUME_BUCKET)
+        .upload(pdfPath, pdfBytes, { contentType: "application/pdf" });
+
+      if (!error) {
+        await supabase.from("resumes").update({ pdf_storage_path: pdfPath }).eq("id", resumeData.id);
+      }
+    } catch {
+      // PDF generation failure is non-fatal
+    }
+  }
 
   await supabase.from("applications").update({
     tailored_resume_id: resumeData?.id ?? null,
