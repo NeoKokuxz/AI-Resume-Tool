@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generatePDFBytes } from "@/lib/pdf-utils";
+import { generatePDFBytes, stripSummarySection } from "@/lib/pdf-utils";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,7 +13,7 @@ export async function OPTIONS() {
 
 export async function POST(request: NextRequest) {
   const { content, fileName } = await request.json();
-  const pdfBytes = await generatePDFBytes(content as string);
+  const pdfBytes = await generatePDFBytes(stripSummarySection(content as string));
 
   return new NextResponse(Buffer.from(pdfBytes), {
     headers: {

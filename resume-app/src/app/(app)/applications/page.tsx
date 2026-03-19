@@ -28,30 +28,30 @@ export default function ApplicationsPage() {
   const [jobDetailApp, setJobDetailApp] = useState<Application | null>(null);
   const [viewingApplication, setViewingApplication] = useState<Application | null>(null);
   const [viewingResumeContent, setViewingResumeContent] = useState<{ resume: string; coverLetter: string } | null>(null);
+  const [tailoredPdfStoragePath, setTailoredPdfStoragePath] = useState<string | undefined>();
   const [loadingResume, setLoadingResume] = useState(false);
   const [pendingOp, setPendingOp] = useState<{ operationId: string; applicationId: string } | null>(null);
+
+  async function handleViewResume(app: Application) {
+    setViewingApplication(app);
+    setViewingResumeContent(null);
+    setTailoredPdfStoragePath(undefined);
+    setLoadingResume(true);
+    if (app.tailoredResumeId) {
+      const r = await fetchResumeById(app.tailoredResumeId);
+      setViewingResumeContent(r ? { resume: r.content, coverLetter: app.coverLetter || "" } : null);
+      setTailoredPdfStoragePath(r?.pdfStoragePath);
+    }
+    setLoadingResume(false);
+  }
 
   useAIOperation({
     operationId: pendingOp?.operationId ?? null,
     onSuccess: async () => {
       const data = await fetchAll();
       if (data) hydrate(data);
-
-      // Find updated application and open modal
-      const appId = pendingOp?.applicationId;
       setPendingOp(null);
       setGeneratingId(null);
-
-      if (appId) {
-        const updatedApp = useAppStore.getState().applications.find((a) => a.id === appId);
-        if (updatedApp?.tailoredResumeId) {
-          setViewingApplication(updatedApp);
-          setLoadingResume(true);
-          const r = await fetchResumeById(updatedApp.tailoredResumeId);
-          setViewingResumeContent(r ? { resume: r.content, coverLetter: updatedApp.coverLetter || "" } : null);
-          setLoadingResume(false);
-        }
-      }
     },
     onError: () => {
       setPendingOp(null);
@@ -104,6 +104,7 @@ export default function ApplicationsPage() {
           jobTitle: application.job.title,
           company: application.job.company,
           applicationId: application.id,
+          basePdfStoragePath: baseResume.pdfStoragePath,
         },
       }),
     });
@@ -160,16 +161,7 @@ export default function ApplicationsPage() {
                       onDelete={() => { deleteApplicationFromDb(app.id); deleteApplication(app.id); }}
                       onGenerateResume={() => handleGenerateResume(app)}
                       isGenerating={generatingId === app.id}
-                      onViewResume={async () => {
-                        setViewingApplication(app);
-                        setViewingResumeContent(null);
-                        setLoadingResume(true);
-                        if (app.tailoredResumeId) {
-                          const r = await fetchResumeById(app.tailoredResumeId);
-                          setViewingResumeContent(r ? { resume: r.content, coverLetter: app.coverLetter || "" } : null);
-                        }
-                        setLoadingResume(false);
-                      }}
+                      onViewResume={() => handleViewResume(app)}
                       onUpdateNotes={(notes) => { updateApplication(app.id, { notes }); updateApplicationInDb(app.id, { notes }); }}
                       onViewDetails={() => setJobDetailApp(app)}
                     />
@@ -194,7 +186,9 @@ export default function ApplicationsPage() {
         application={viewingApplication}
         resumeContent={viewingResumeContent}
         loading={loadingResume}
-        onClose={() => { setViewingApplication(null); setViewingResumeContent(null); }}
+        originalPdfStoragePath={baseResume?.pdfStoragePath}
+        tailoredPdfStoragePath={tailoredPdfStoragePath}
+        onClose={() => { setViewingApplication(null); setViewingResumeContent(null); setTailoredPdfStoragePath(undefined); }}
       />
 
       {jobDetailApp && (

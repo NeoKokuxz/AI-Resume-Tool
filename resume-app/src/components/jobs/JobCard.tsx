@@ -15,16 +15,20 @@ import {
   ChevronUp,
   CheckCircle,
   AlertCircle,
+  FileText,
 } from "lucide-react";
+import { Application } from "@/types";
 
 interface JobCardProps {
   job: Job;
   onDelete: () => void;
   onCreateApplication: (job: Job) => void;
   hasApplication: boolean;
+  application?: Application;
+  onViewTailoredResume?: () => void;
 }
 
-export function JobCard({ job, onDelete, onCreateApplication, hasApplication }: JobCardProps) {
+export function JobCard({ job, onDelete, onCreateApplication, hasApplication, application, onViewTailoredResume }: JobCardProps) {
   const [expanded, setExpanded] = useState(false);
   const ats = job.atsResult;
 
@@ -166,6 +170,17 @@ export function JobCard({ job, onDelete, onCreateApplication, hasApplication }: 
             className="flex-1"
           >
             Track Application
+          </Button>
+        )}
+        {application?.tailoredResumeId && onViewTailoredResume && (
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<FileText size={13} />}
+            onClick={onViewTailoredResume}
+            className="flex-1"
+          >
+            View Tailored Resume
           </Button>
         )}
       </div>

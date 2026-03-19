@@ -12,6 +12,7 @@ function mapResume(row: Record<string, unknown>): Resume {
     content: row.content as string,
     skills: (row.skills as string[]) || [],
     uploadedAt: row.uploaded_at as string,
+    pdfStoragePath: (row.pdf_storage_path as string) || undefined,
   };
 }
 
@@ -159,6 +160,32 @@ export async function fetchAll() {
   };
 }
 
+// ─── Resume Storage ───────────────────────────────────────────────────────────
+
+const RESUME_BUCKET = "resume-pdfs";
+
+export async function uploadResumePDF(file: File, resumeId: string): Promise<string | null> {
+  const userId = await getUserId();
+  if (!userId) return null;
+
+  const path = `${userId}/${resumeId}.pdf`;
+  const { error } = await supabase.storage
+    .from(RESUME_BUCKET)
+    .upload(path, file, { upsert: true, contentType: "application/pdf" });
+
+  if (error) return null;
+  return path;
+}
+
+export async function getResumePDFSignedUrl(path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage
+    .from(RESUME_BUCKET)
+    .createSignedUrl(path, 3600);
+
+  if (error || !data) return null;
+  return data.signedUrl;
+}
+
 // ─── Resume ──────────────────────────────────────────────────────────────────
 
 export async function saveResume(resume: Resume): Promise<void> {
@@ -183,6 +210,7 @@ export async function saveResume(resume: Resume): Promise<void> {
       content: resume.content,
       skills: resume.skills,
       uploaded_at: resume.uploadedAt,
+      pdf_storage_path: resume.pdfStoragePath ?? null,
     })
     .select("id")
     .single();
@@ -199,6 +227,14 @@ export async function deleteResume(): Promise<void> {
   const userId = await getUserId();
   if (!userId) return;
 
+  // Fetch storage path before deleting
+  const { data: existing } = await supabase
+    .from("resumes")
+    .select("pdf_storage_path")
+    .eq("user_id", userId)
+    .eq("type", "base")
+    .maybeSingle();
+
   // Clear base_resume_id in profile first (FK constraint)
   await supabase
     .from("user_profiles")
@@ -211,6 +247,11 @@ export async function deleteResume(): Promise<void> {
     .delete()
     .eq("user_id", userId)
     .eq("type", "base");
+
+  // Remove original PDF from storage if present
+  if (existing?.pdf_storage_path) {
+    await supabase.storage.from(RESUME_BUCKET).remove([existing.pdf_storage_path]);
+  }
 }
 
 /** Save a tailored resume to the resumes table and return its ID. */

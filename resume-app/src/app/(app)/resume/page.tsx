@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { Button } from "@/components/ui/Button";
 import { generateId } from "@/lib/utils";
-import { saveResume, deleteResume } from "@/lib/db";
+import { saveResume, deleteResume, uploadResumePDF, updateUserProfile } from "@/lib/db";
 import { Resume } from "@/types";
 import { Edit3, Trash2 } from "lucide-react";
 import { extractSkills } from "@/lib/resume-utils";
@@ -20,26 +20,32 @@ export default function ResumePage() {
   async function handleFile(file: File) {
     let content = "";
 
+    const resumeId = generateId();
     const isPDF = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    let pdfStoragePath: string | undefined;
+
     if (isPDF) {
       const formData = new FormData();
       formData.append("file", file);
       const res = await fetch("/api/parse-pdf", { method: "POST", body: formData });
       const data = await res.json();
       content = data.text ?? "";
+      pdfStoragePath = await uploadResumePDF(file, resumeId) ?? undefined;
     } else {
       content = await file.text();
     }
 
     const resume: Resume = {
-      id: generateId(),
+      id: resumeId,
       fileName: file.name,
       content,
       skills: extractSkills(content),
       uploadedAt: new Date().toISOString(),
+      pdfStoragePath,
     };
     setBaseResume(resume);
     saveResume(resume);
+    updateUserProfile({ skills: resume.skills });
   }
 
   function handlePasteMode() {
@@ -58,6 +64,7 @@ export default function ResumePage() {
     };
     setBaseResume(resume);
     saveResume(resume);
+    updateUserProfile({ skills: resume.skills });
     setIsEditing(false);
   }
 

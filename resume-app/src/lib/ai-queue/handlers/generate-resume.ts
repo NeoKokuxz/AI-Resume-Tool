@@ -1,26 +1,43 @@
-import { tailorResume } from "@/lib/resume-tailor";
-import { generateTailoredPDF, generatePDFBytes } from "@/lib/pdf-utils";
+import { tailorPDF } from "@/lib/pdf-tailor";
 import type { HandlerContext } from "./types";
 
 const RESUME_BUCKET = "resume-pdfs";
 
 export async function handleGenerateResume({ payload, userId, supabase }: HandlerContext) {
-  const { baseResume, jobDescription, jobTitle, company, applicationId, basePdfStoragePath } = payload as {
-    baseResume: string;
+  const { jobDescription, jobTitle, company, applicationId } = payload as {
     jobDescription: string;
     jobTitle: string;
     company: string;
     applicationId: string;
-    basePdfStoragePath?: string;
   };
 
-  // Tailor resume + download base PDF in parallel
-  const [{ tailoredResume, coverLetter, tailoredSections }, baseBlob] = await Promise.all([
-    tailorResume({ baseResume, jobDescription, jobTitle, company }),
-    basePdfStoragePath
-      ? supabase.storage.from(RESUME_BUCKET).download(basePdfStoragePath).then(r => r.data)
-      : Promise.resolve(null),
-  ]);
+  // Fetch the user's base resume PDF
+  const { data: baseResume } = await supabase
+    .from("resumes")
+    .select("pdf_storage_path")
+    .eq("user_id", userId)
+    .eq("type", "base")
+    .order("uploaded_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!baseResume?.pdf_storage_path) return;
+
+  const { data: baseBlob } = await supabase.storage
+    .from(RESUME_BUCKET)
+    .download(baseResume.pdf_storage_path);
+
+  if (!baseBlob) return;
+
+  const { pdfBytes, tailoredResume, coverLetter } = await tailorPDF(
+    await baseBlob.arrayBuffer(),
+    { jobDescription, jobTitle, company }
+  );
+
+  const pdfPath = `${userId}/tailored-${Date.now()}.pdf`;
+  const { error: uploadErr } = await supabase.storage
+    .from(RESUME_BUCKET)
+    .upload(pdfPath, pdfBytes, { contentType: "application/pdf" });
 
   const { data: resumeData } = await supabase
     .from("resumes")
@@ -30,31 +47,10 @@ export async function handleGenerateResume({ payload, userId, supabase }: Handle
       file_name: `Tailored — ${jobTitle} at ${company}`,
       content: tailoredResume,
       skills: [],
+      pdf_storage_path: uploadErr ? null : pdfPath,
     })
     .select("id")
     .single();
-
-  if (resumeData?.id) {
-    try {
-      let pdfBytes: Uint8Array;
-      if (baseBlob) {
-        pdfBytes = await generateTailoredPDF(tailoredSections, await baseBlob.arrayBuffer());
-      } else {
-        pdfBytes = await generatePDFBytes(tailoredResume, { fitToOnePage: true });
-      }
-
-      const pdfPath = `${userId}/tailored-${resumeData.id}.pdf`;
-      const { error } = await supabase.storage
-        .from(RESUME_BUCKET)
-        .upload(pdfPath, pdfBytes, { contentType: "application/pdf" });
-
-      if (!error) {
-        await supabase.from("resumes").update({ pdf_storage_path: pdfPath }).eq("id", resumeData.id);
-      }
-    } catch {
-      // PDF generation failure is non-fatal
-    }
-  }
 
   await supabase.from("applications").update({
     tailored_resume_id: resumeData?.id ?? null,

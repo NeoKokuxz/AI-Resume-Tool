@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/ai-queue/client";
 import { getUserIdFromToken, extractBearerToken } from "@/lib/ai-queue/auth";
-import { tailorResume } from "@/lib/resume-tailor";
-import { parsePDFText, generateTailoredPDF, generatePDFBytes } from "@/lib/pdf-utils";
+import { tailorPDF } from "@/lib/pdf-tailor";
 
 const RESUME_BUCKET = "resume-pdfs";
 
@@ -35,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServiceRoleClient();
 
-    // Fetch the user's base resume PDF path directly from their profile
+    // Look up the user's base resume PDF directly
     const { data: baseResume } = await supabase
       .from("resumes")
       .select("pdf_storage_path")
@@ -52,7 +51,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Download base PDF
     const { data: baseBlob } = await supabase.storage
       .from(RESUME_BUCKET)
       .download(baseResume.pdf_storage_path);
@@ -64,42 +62,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const basePdfBytes = await baseBlob.arrayBuffer();
+    // Single call: extract text from PDF → AI tailor → generate new PDF
+    const { pdfBytes, tailoredResume, coverLetter } = await tailorPDF(
+      await baseBlob.arrayBuffer(),
+      { jobDescription, jobTitle, company }
+    );
 
-    // Extract text directly from the PDF — source of truth for AI
-    const baseResumeText = await parsePDFText(basePdfBytes.slice(0));
+    const pdfBase64 = Buffer.from(pdfBytes).toString("base64");
 
-    // Tailor: Gemini rewrites the non-preserved sections
-    const { tailoredResume, coverLetter, tailoredSections } = await tailorResume({
-      baseResume: baseResumeText,
-      jobDescription,
-      jobTitle,
-      company,
-    });
-
-    // Generate tailored PDF by replacing section text in the original
-    let pdfBase64: string | undefined;
+    // Upload tailored PDF and persist records
     let pdfStoragePath: string | undefined;
-    try {
-      const pdfBytes = tailoredSections.length > 0
-        ? await generateTailoredPDF(tailoredSections, basePdfBytes)
-        : await generatePDFBytes(tailoredResume, { fitToOnePage: true });
-
-      pdfBase64 = Buffer.from(pdfBytes).toString("base64");
-
-      if (applicationId) {
-        const path = `${userId}/tailored-ext-${Date.now()}.pdf`;
-        const { error } = await supabase.storage
-          .from(RESUME_BUCKET)
-          .upload(path, pdfBytes, { contentType: "application/pdf" });
-        if (!error) pdfStoragePath = path;
-      }
-    } catch (pdfErr) {
-      console.error("[generate-resume] PDF generation failed:", pdfErr);
-    }
-
-    // Persist tailored resume + update application
     if (applicationId) {
+      const path = `${userId}/tailored-ext-${Date.now()}.pdf`;
+      const { error } = await supabase.storage
+        .from(RESUME_BUCKET)
+        .upload(path, pdfBytes, { contentType: "application/pdf" });
+      if (!error) pdfStoragePath = path;
+
       const { data: resumeRow } = await supabase
         .from("resumes")
         .insert({

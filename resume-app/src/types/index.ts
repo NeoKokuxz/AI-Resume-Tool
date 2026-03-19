@@ -28,6 +28,7 @@ export interface Resume {
   content: string;
   skills: string[];
   uploadedAt: string;
+  pdfStoragePath?: string; // path in Supabase Storage, only set for PDF uploads
 }
 
 export interface ATSResult {

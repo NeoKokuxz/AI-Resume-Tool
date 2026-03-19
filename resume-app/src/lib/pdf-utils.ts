@@ -46,70 +46,6 @@ export async function parsePDFText(bytes: ArrayBuffer): Promise<string> {
   return pages.join("\n") + urlBlock;
 }
 
-// ─── Metrics ──────────────────────────────────────────────────────────────────
-
-export interface PDFMetrics {
-  fontSize: number;
-  margin: number;
-  firstSectionY?: number; // baseline y of the topmost body section header
-}
-
-export async function extractPDFMetrics(bytes: ArrayBuffer): Promise<PDFMetrics> {
-  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(bytes) }).promise;
-  const page = await pdf.getPage(1);
-  const content = await page.getTextContent();
-
-  const heights: number[] = [];
-  const xPositions: number[] = [];
-
-  for (const item of content.items) {
-    const i = item as Record<string, unknown>;
-    if (typeof i.height === "number" && i.height > 0) heights.push(i.height);
-    if (Array.isArray(i.transform) && typeof i.transform[4] === "number") {
-      xPositions.push(i.transform[4] as number);
-    }
-  }
-
-  const counts = new Map<number, number>();
-  for (const h of heights) {
-    const r = Math.round(h);
-    if (r >= 8 && r <= 13) counts.set(r, (counts.get(r) || 0) + 1);
-  }
-  let fontSize = 10;
-  let maxCount = 0;
-  for (const [size, count] of counts) {
-    if (count > maxCount) { maxCount = count; fontSize = size; }
-  }
-
-  const margin = xPositions.length > 0
-    ? Math.max(36, Math.min(72, Math.round(Math.min(...xPositions))))
-    : 56;
-
-  // Find the topmost (first when reading top-to-bottom) body section header
-  let firstSectionY: number | undefined;
-  const SECTION_RE_METRIC = /^[A-Z][A-Z0-9\s\/\-\+\|&,]{2,}$/;
-  const SKIP_RE_METRIC = /^(SUMMARY|PROFESSIONAL SUMMARY|OBJECTIVE|PROFILE|PROFESSIONAL PROFILE|LINKS?)$/i;
-
-  for (const item of content.items) {
-    const i = item as Record<string, unknown>;
-    if (typeof i.str !== "string" || !Array.isArray(i.transform)) continue;
-    const text = (i.str as string).trim();
-    const x = i.transform[4] as number;
-    // Must be all-caps section header text, near left margin
-    if (
-      !SECTION_RE_METRIC.test(text) ||
-      text.length < 3 ||
-      text.length >= 40 ||
-      SKIP_RE_METRIC.test(text) ||
-      x > margin + 15
-    ) continue;
-    const y = i.transform[5] as number;
-    if (firstSectionY === undefined || y > firstSectionY) firstSectionY = y;
-  }
-
-  return { fontSize, margin, firstSectionY };
-}
 
 // ─── Summary stripping ────────────────────────────────────────────────────────
 
@@ -248,7 +184,7 @@ function addLinkAnnotations(
 
 // ─── Generate ─────────────────────────────────────────────────────────────────
 
-function sanitize(text: string): string {
+export function sanitizePDFText(text: string): string {
   return text
     .replace(/\t/g, "    ")
     .replace(/[\u2018\u2019]/g, "'")
@@ -302,7 +238,7 @@ export async function generatePDFBytes(
   function buildSegments(fs: number) {
     const segs: { text: string; bold: boolean }[] = [];
     for (const raw of renderContent.split("\n")) {
-      const cleaned = sanitize(raw);
+      const cleaned = sanitizePDFText(raw);
       const trimmed = cleaned.trim();
       const isMarkdownBold = /^\*\*(.+)\*\*$/.test(trimmed);
       const strippedLine = isMarkdownBold
@@ -359,145 +295,3 @@ export async function generatePDFBytes(
   return pdfDoc.save();
 }
 
-// ─── Tailor on top of original PDF ───────────────────────────────────────────
-
-/**
- * Copy every page of the original PDF, then — for each section that was
- * AI-tailored — white-out only its content area and redraw with the new text.
- *
- * Sections NOT in tailoredSections (skills, education, contact header) are
- * never touched: they stay pixel-perfect from the original.
- * All existing link annotations (LinkedIn/GitHub etc.) are preserved because
- * we copy pages with copyPages(), which copies annotations too.
- */
-export async function generateTailoredPDF(
-  tailoredSections: { header: string; content: string }[],
-  basePdfBytes: ArrayBuffer,
-): Promise<Uint8Array> {
-  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const pdfJsDoc = await pdfjsLib.getDocument({ data: new Uint8Array(basePdfBytes.slice(0)) }).promise;
-
-  const srcDoc = await PDFDocument.load(basePdfBytes);
-  const pdfDoc = await PDFDocument.create();
-
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-  const metrics = await extractPDFMetrics(basePdfBytes);
-  const fontSize = metrics.fontSize;
-  const margin = metrics.margin;
-  const lineHeight = Math.round(fontSize * 1.35);
-
-  // Header → tailored content lookup (case-insensitive)
-  const tailoredMap = new Map(
-    tailoredSections.map(s => [s.header.trim().toUpperCase(), s.content])
-  );
-
-  const SECTION_RE_PDF = /^[A-Z][A-Z0-9\s\/\-\+\|&,]{2,}$/;
-  const SKIP_RE_PDF = /^(SUMMARY|PROFESSIONAL SUMMARY|OBJECTIVE|PROFILE|PROFESSIONAL PROFILE|LINKS?)$/i;
-
-  for (let pIdx = 0; pIdx < srcDoc.getPageCount(); pIdx++) {
-    const [copiedPage] = await pdfDoc.copyPages(srcDoc, [pIdx]);
-    pdfDoc.addPage(copiedPage);
-    const page = pdfDoc.getPage(pIdx);
-    const { width: pageWidth, height: pageHeight } = page.getSize();
-    const maxWidth = pageWidth - margin * 2;
-
-    // Find all section headers on this page with their exact y-positions
-    const pdfJsPage = await pdfJsDoc.getPage(pIdx + 1);
-    const textContent = await pdfJsPage.getTextContent();
-
-    const pageHeaders: { header: string; y: number }[] = [];
-    for (const item of textContent.items) {
-      const i = item as Record<string, unknown>;
-      if (typeof i.str !== "string" || !Array.isArray(i.transform)) continue;
-      const text = (i.str as string).trim();
-      const x = i.transform[4] as number;
-      if (
-        SECTION_RE_PDF.test(text) &&
-        text.length >= 3 &&
-        text.length < 40 &&
-        !SKIP_RE_PDF.test(text) &&
-        x <= margin + 15 // left-aligned = section header, not indented content
-      ) {
-        pageHeaders.push({ header: text, y: i.transform[5] as number });
-      }
-    }
-
-    // Sort top-to-bottom (highest y = top of page first in PDF coords)
-    pageHeaders.sort((a, b) => b.y - a.y);
-
-    for (let i = 0; i < pageHeaders.length; i++) {
-      const { header, y: headerY } = pageHeaders[i];
-      const tailoredContent = tailoredMap.get(header.toUpperCase());
-      if (tailoredContent === undefined) continue; // preserve this section as-is
-
-      // Content area: just below section header → just above next section header (or bottom margin)
-      const contentStartY = headerY - lineHeight;
-      const contentEndY = i < pageHeaders.length - 1
-        ? pageHeaders[i + 1].y + lineHeight // stop just above the next section
-        : margin;
-
-      if (contentStartY <= contentEndY) continue;
-
-      // White out the section's content area only (header text preserved from original)
-      page.drawRectangle({
-        x: 0,
-        y: contentEndY,
-        width: pageWidth,
-        height: contentStartY - contentEndY,
-        color: rgb(1, 1, 1),
-      });
-
-      // Draw the tailored content
-      function wrapLine(text: string, fnt: PDFFont, fs: number): string[] {
-        const words = text.split(" ");
-        const lines: string[] = [];
-        let current = "";
-        for (const word of words) {
-          const test = current ? `${current} ${word}` : word;
-          try {
-            if (fnt.widthOfTextAtSize(test, fs) <= maxWidth) {
-              current = test;
-            } else {
-              if (current) lines.push(current);
-              current = word;
-            }
-          } catch {
-            if (current) lines.push(current);
-            current = word;
-          }
-        }
-        if (current) lines.push(current);
-        return lines.length ? lines : [""];
-      }
-
-      let y = contentStartY;
-      for (const raw of tailoredContent.split("\n")) {
-        if (y <= contentEndY) break; // don't overflow into the next preserved section
-        const cleaned = sanitize(raw);
-        const trimmed = cleaned.trim();
-        const isMarkdownBold = /^\*\*(.+)\*\*$/.test(trimmed);
-        const strippedLine = isMarkdownBold
-          ? cleaned.replace(/^\s*\*\*/, "").replace(/\*\*\s*$/, "")
-          : cleaned.replace(/\*\*/g, "");
-        const isBold =
-          isMarkdownBold ||
-          /^[A-Z][A-Z\s\/\-]{2,}$/.test(trimmed.replace(/\*\*/g, "")) ||
-          /^---/.test(trimmed);
-        const fnt = isBold ? boldFont : font;
-        for (const line of wrapLine(strippedLine || " ", fnt, fontSize)) {
-          if (y <= contentEndY) break;
-          try {
-            page.drawText(line, { x: margin, y, size: fontSize, font: fnt, color: rgb(0.1, 0.1, 0.1) });
-          } catch { /* skip unencodable */ }
-          y -= lineHeight;
-        }
-      }
-    }
-
-    void pageHeight; // suppress unused warning
-  }
-
-  return pdfDoc.save();
-}

@@ -4,11 +4,12 @@ import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { Button } from "@/components/ui/Button";
 import { calculateATSScore } from "@/lib/ats-scorer";
-import { createJob, deleteJobFromDb, createApplication, fetchAll } from "@/lib/db";
-import { Job } from "@/types";
+import { createJob, deleteJobFromDb, createApplication, fetchAll, fetchResumeById } from "@/lib/db";
+import { Application, Job } from "@/types";
 import { Plus, Briefcase } from "lucide-react";
 import { JobCard } from "@/components/jobs/JobCard";
 import { AddJobModal } from "@/components/jobs/AddJobModal";
+import { ResumeModal } from "@/components/applications/ResumeModal";
 import { useAIOperation } from "@/lib/ai-queue/realtime";
 
 export default function JobsPage() {
@@ -34,7 +35,26 @@ export default function JobsPage() {
   const [url, setUrl] = useState("");
   const [description, setDescription] = useState("");
 
+  const [viewingApplication, setViewingApplication] = useState<Application | null>(null);
+  const [viewingResumeContent, setViewingResumeContent] = useState<{ resume: string; coverLetter: string } | null>(null);
+  const [tailoredPdfStoragePath, setTailoredPdfStoragePath] = useState<string | undefined>();
+  const [loadingResume, setLoadingResume] = useState(false);
+
   const appliedJobIds = new Set(applications.map((a) => a.jobId));
+  const applicationByJobId = Object.fromEntries(applications.map((a) => [a.jobId, a]));
+
+  async function handleViewTailoredResume(app: Application) {
+    setViewingApplication(app);
+    setViewingResumeContent(null);
+    setTailoredPdfStoragePath(undefined);
+    setLoadingResume(true);
+    if (app.tailoredResumeId) {
+      const r = await fetchResumeById(app.tailoredResumeId);
+      setViewingResumeContent(r ? { resume: r.content, coverLetter: app.coverLetter || "" } : null);
+      setTailoredPdfStoragePath(r?.pdfStoragePath);
+    }
+    setLoadingResume(false);
+  }
 
   function resetForm() {
     setTitle(""); setCompany(""); setLocation(""); setUrl(""); setDescription("");
@@ -138,10 +158,24 @@ export default function JobsPage() {
               onDelete={() => { deleteJobFromDb(job.id); deleteJob(job.id); }}
               onCreateApplication={handleCreateApplication}
               hasApplication={appliedJobIds.has(job.id)}
+              application={applicationByJobId[job.id]}
+              onViewTailoredResume={() => {
+                const app = applicationByJobId[job.id];
+                if (app) handleViewTailoredResume(app);
+              }}
             />
           ))}
         </div>
       )}
+
+      <ResumeModal
+        application={viewingApplication}
+        resumeContent={viewingResumeContent}
+        loading={loadingResume}
+        originalPdfStoragePath={baseResume?.pdfStoragePath}
+        tailoredPdfStoragePath={tailoredPdfStoragePath}
+        onClose={() => { setViewingApplication(null); setViewingResumeContent(null); setTailoredPdfStoragePath(undefined); }}
+      />
 
       <AddJobModal
         isOpen={isModalOpen}

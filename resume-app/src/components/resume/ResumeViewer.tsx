@@ -3,13 +3,20 @@
 import { Resume } from "@/types";
 import { Badge } from "@/components/ui/Badge";
 import { formatRelativeTime } from "@/lib/utils";
-import { CheckCircle, FileText, Star } from "lucide-react";
+import { getResumePDFSignedUrl } from "@/lib/db";
+import { CheckCircle, Download, FileText, Star } from "lucide-react";
 
 interface ResumeViewerProps {
   resume: Resume;
 }
 
 export function ResumeViewer({ resume }: ResumeViewerProps) {
+  async function handleViewPDF() {
+    if (!resume.pdfStoragePath) return;
+    const url = await getResumePDFSignedUrl(resume.pdfStoragePath);
+    if (url) window.open(url, "_blank");
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Resume meta */}
@@ -46,6 +53,15 @@ export function ResumeViewer({ resume }: ResumeViewerProps) {
               </span>
             </div>
           </div>
+          {resume.pdfStoragePath && (
+            <button
+              onClick={handleViewPDF}
+              className="mt-4 w-full flex items-center justify-center gap-2 text-xs text-blue-400 hover:text-blue-300 border border-blue-900 hover:border-blue-700 rounded-md py-2 transition-colors"
+            >
+              <Download size={12} />
+              View original PDF
+            </button>
+          )}
         </div>
 
         {/* Skills */}

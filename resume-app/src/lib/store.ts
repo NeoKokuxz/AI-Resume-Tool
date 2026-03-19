@@ -2,6 +2,8 @@
 
 import { create } from "zustand";
 import {
+  AIOperationStatus,
+  AIOperationType,
   Application,
   ApplicationStatus,
   Email,
@@ -35,6 +37,11 @@ interface AppStore {
   updateEmail: (id: string, updates: Partial<Email>) => void;
   deleteEmail: (id: string) => void;
 
+  // AI Queue operations
+  activeOperations: Record<string, { type: AIOperationType; status: AIOperationStatus; error?: string }>;
+  setOperationStatus: (id: string, type: AIOperationType, status: AIOperationStatus, error?: string) => void;
+  clearOperation: (id: string) => void;
+
   // Hydrate from Supabase
   hydrate: (data: {
     resume: Resume | null;
@@ -47,6 +54,16 @@ interface AppStore {
 export const useAppStore = create<AppStore>()((set) => ({
   hydrated: false,
   baseResume: null,
+
+  activeOperations: {},
+  setOperationStatus: (id, type, status, error) =>
+    set((s) => ({ activeOperations: { ...s.activeOperations, [id]: { type, status, error } } })),
+  clearOperation: (id) =>
+    set((s) => {
+      const { [id]: _, ...rest } = s.activeOperations;
+      return { activeOperations: rest };
+    }),
+
   setBaseResume: (resume) => set({ baseResume: resume }),
 
   jobs: [],
