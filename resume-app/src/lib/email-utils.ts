@@ -12,7 +12,8 @@ export async function classifyEmail(
     });
     const data = await res.json();
     return data.classification || "unknown";
-  } catch {
+  } catch (err) {
+    console.error("classifyEmail failed:", err);
     return "unknown";
   }
 }

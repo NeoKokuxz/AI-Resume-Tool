@@ -1,6 +1,6 @@
 import { ATSResult } from "@/types";
 
-const TECH_KEYWORDS = [
+export const TECH_KEYWORDS = [
   "react", "typescript", "javascript", "python", "node.js", "next.js",
   "vue", "angular", "graphql", "rest api", "sql", "nosql", "mongodb",
   "postgresql", "mysql", "redis", "docker", "kubernetes", "aws", "gcp",
@@ -10,10 +10,10 @@ const TECH_KEYWORDS = [
   "tailwind", "css", "html", "figma", "ux", "ui", "product management",
   "leadership", "communication", "teamwork", "testing", "jest", "cypress",
   "webpack", "vite", "linux", "bash", "terraform", "ansible", "nginx",
-  "express", "nestjs", "prisma", "sequelize", "typeorm", "graphql",
+  "express", "nestjs", "prisma", "sequelize", "typeorm",
   "apollo", "trpc", "supabase", "firebase", "stripe", "twilio",
   "datadog", "sentry", "github", "gitlab", "jira", "confluence",
-  "figma", "sketch", "storybook", "eslint", "prettier", "jest",
+  "sketch", "storybook", "eslint", "prettier",
 ];
 
 const SOFT_SKILLS = [
