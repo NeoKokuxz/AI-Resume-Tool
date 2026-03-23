@@ -34,3 +34,12 @@ Thumbs.db
 
 # vercel
 .vercel
+
+# generated cache files
+.resume-cache.json
+
+# yarn
+.yarn/install-state.gz
+
+# lock files (using yarn)
+package-lock.json
