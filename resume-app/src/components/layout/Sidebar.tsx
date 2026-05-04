@@ -9,21 +9,46 @@ import {
   KanbanSquare,
   Mail,
   Bot,
+  BookOpen,
+  Mic,
+  MessagesSquare,
   ChevronRight,
+  ChevronDown,
   LogOut,
   UserCircle,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchUserProfile } from "@/lib/db";
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/resume", label: "My Resume", icon: FileText },
-  { href: "/jobs", label: "Job Listings", icon: Briefcase },
-  { href: "/applications", label: "Applications", icon: KanbanSquare },
-  { href: "/email", label: "Email Monitor", icon: Mail },
+type LeafItem = { kind: "leaf"; href: string; label: string; icon: LucideIcon };
+type GroupItem = {
+  kind: "group";
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  children: { href: string; label: string; icon: LucideIcon }[];
+};
+type NavItem = LeafItem | GroupItem;
+
+const navItems: NavItem[] = [
+  { kind: "leaf", href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { kind: "leaf", href: "/resume", label: "My Resume", icon: FileText },
+  { kind: "leaf", href: "/jobs", label: "Job Listings", icon: Briefcase },
+  { kind: "leaf", href: "/applications", label: "Applications", icon: KanbanSquare },
+  { kind: "leaf", href: "/email", label: "Email Monitor", icon: Mail },
+  {
+    kind: "group",
+    id: "interview-prep",
+    label: "Interview Prep",
+    icon: MessagesSquare,
+    children: [
+      { href: "/study", label: "Study", icon: BookOpen },
+      { href: "/interview", label: "Interview", icon: Mic },
+    ],
+  },
 ];
 
 export function Sidebar() {
@@ -32,6 +57,43 @@ export function Sidebar() {
   const supabase = createClient();
   const [userName, setUserName] = useState("");
   const [userTitle, setUserTitle] = useState("");
+
+  // Track expanded groups. Auto-expand when one of the children is active.
+  const initialExpanded = useMemo(() => {
+    const set = new Set<string>();
+    navItems.forEach((item) => {
+      if (item.kind === "group" && item.children.some((c) => pathname === c.href)) {
+        set.add(item.id);
+      }
+    });
+    return set;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [expanded, setExpanded] = useState<Set<string>>(initialExpanded);
+
+  // Re-expand when navigating into a child via direct link
+  useEffect(() => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      navItems.forEach((item) => {
+        if (item.kind === "group" && item.children.some((c) => pathname === c.href) && !next.has(item.id)) {
+          next.add(item.id);
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [pathname]);
+
+  function toggleGroup(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   useEffect(() => {
     fetchUserProfile().then((p) => {
@@ -65,31 +127,101 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group",
-                isActive
-                  ? "bg-indigo-600/20 text-indigo-400 border border-indigo-600/30"
-                  : "text-gray-400 hover:bg-gray-800 hover:text-gray-200"
-              )}
-            >
-              <Icon
-                size={17}
+          if (item.kind === "leaf") {
+            const Icon = item.icon;
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
                 className={cn(
-                  "flex-shrink-0 transition-colors",
-                  isActive ? "text-indigo-400" : "text-gray-500 group-hover:text-gray-300"
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group",
+                  isActive
+                    ? "bg-indigo-600/20 text-indigo-400 border border-indigo-600/30"
+                    : "text-gray-400 hover:bg-gray-800 hover:text-gray-200"
                 )}
-              />
-              <span className="flex-1">{item.label}</span>
-              {isActive && <ChevronRight size={14} className="text-indigo-400 opacity-60" />}
-            </Link>
+              >
+                <Icon
+                  size={17}
+                  className={cn(
+                    "flex-shrink-0 transition-colors",
+                    isActive ? "text-indigo-400" : "text-gray-500 group-hover:text-gray-300"
+                  )}
+                />
+                <span className="flex-1">{item.label}</span>
+                {isActive && <ChevronRight size={14} className="text-indigo-400 opacity-60" />}
+              </Link>
+            );
+          }
+
+          // Group
+          const Icon = item.icon;
+          const isOpen = expanded.has(item.id);
+          const hasActiveChild = item.children.some((c) => pathname === c.href);
+
+          return (
+            <div key={item.id}>
+              <button
+                type="button"
+                onClick={() => toggleGroup(item.id)}
+                aria-expanded={isOpen}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group w-full",
+                  hasActiveChild && !isOpen
+                    ? "text-indigo-400"
+                    : "text-gray-400 hover:bg-gray-800 hover:text-gray-200"
+                )}
+              >
+                <Icon
+                  size={17}
+                  className={cn(
+                    "flex-shrink-0 transition-colors",
+                    hasActiveChild ? "text-indigo-400" : "text-gray-500 group-hover:text-gray-300"
+                  )}
+                />
+                <span className="flex-1 text-left">{item.label}</span>
+                <ChevronDown
+                  size={14}
+                  className={cn(
+                    "flex-shrink-0 text-gray-500 transition-transform",
+                    isOpen ? "rotate-0" : "-rotate-90"
+                  )}
+                />
+              </button>
+
+              {isOpen && (
+                <div className="mt-0.5 ml-3 pl-3 border-l border-gray-800 space-y-0.5">
+                  {item.children.map((child) => {
+                    const ChildIcon = child.icon;
+                    const isActive = pathname === child.href;
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        className={cn(
+                          "flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all group",
+                          isActive
+                            ? "bg-indigo-600/20 text-indigo-400 border border-indigo-600/30"
+                            : "text-gray-400 hover:bg-gray-800 hover:text-gray-200"
+                        )}
+                      >
+                        <ChildIcon
+                          size={14}
+                          className={cn(
+                            "flex-shrink-0 transition-colors",
+                            isActive ? "text-indigo-400" : "text-gray-500 group-hover:text-gray-300"
+                          )}
+                        />
+                        <span className="flex-1">{child.label}</span>
+                        {isActive && <ChevronRight size={12} className="text-indigo-400 opacity-60" />}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>

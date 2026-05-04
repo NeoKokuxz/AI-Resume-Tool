@@ -687,30 +687,155 @@ async function triggerApplyFlow(shouldFill) {
   }
 }
 
-async function doFill(fillEl, actionsEl) {
+async function extractFieldsFromTab(tabId) {
   const results = await chrome.scripting.executeScript({
-    target: { tabId: appliedTab.id, allFrames: true },
-    func: fillApplicationForm,
-    args: [userProfile || {}, tailoredResume || null],
+    target: { tabId, allFrames: true },
+    func: extractFormFields,
   });
-  const fillResult = results.find(r => r?.result?.results?.some(f => f.filled))?.result
-    || results[0]?.result;
-  if (!fillResult) throw new Error("Could not fill fields on the application page.");
+  return results.flatMap(r => r?.result || []).filter(f => f && f.id);
+}
+
+async function doFill(fillEl, actionsEl) {
+  // ── Phase 1: Extract all form fields from the page ──────────────────────
+  setMsg(fillEl, "info", '<span class="spinner"></span>Scanning form fields...');
+  let fields = await extractFieldsFromTab(appliedTab.id);
+
+  // ── No fields? Look for another Apply button and navigate through ──────
+  if (fields.length === 0) {
+    setMsg(fillEl, "info", '<span class="spinner"></span>No fields found — looking for Apply button...');
+    const clickResult = await chrome.scripting.executeScript({
+      target: { tabId: appliedTab.id, allFrames: true },
+      func: findAndClickApplyButton,
+    });
+    const clicked = clickResult.find(r => r?.result?.success)?.result;
+
+    if (clicked?.success) {
+      if (clicked.newTab) {
+        // Apply button opened a new tab — wait for it
+        setMsg(fillEl, "info", '<span class="spinner"></span>Waiting for application page...');
+        const newTab = await waitForNewTab();
+        appliedTab = newTab;
+        await new Promise(r => setTimeout(r, 2000));
+      } else {
+        // Apply button navigated in the same tab — wait for page to update
+        setMsg(fillEl, "info", '<span class="spinner"></span>Waiting for form to load...');
+        await waitForTabLoad(appliedTab.id);
+        await new Promise(r => setTimeout(r, 2000));
+      }
+      // Retry extraction
+      fields = await extractFieldsFromTab(appliedTab.id);
+    }
+
+    if (fields.length === 0) {
+      // Show message with autofill-again button — user navigates manually
+      fillEl.innerHTML = `<div class="msg info" style="margin-top:10px">No form fields found. Navigate to the application form, then try again.</div>`;
+      actionsEl.innerHTML = `
+        <button class="btn primary" id="btn-autofill-again" style="margin-top:10px;display:flex;align-items:center;justify-content:center;gap:7px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Autofill Again
+        </button>
+        <button class="btn secondary" id="btn-restart-nofill" style="margin-top:8px;display:flex;align-items:center;justify-content:center;gap:6px">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Start Over
+        </button>
+      `;
+      document.getElementById("btn-autofill-again").addEventListener("click", async () => {
+        const btn = document.getElementById("btn-autofill-again");
+        btn.disabled = true;
+        btn.textContent = "Scanning...";
+        try {
+          // Use the current active tab (user may have navigated)
+          const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          appliedTab = activeTab;
+          await doFill(fillEl, actionsEl);
+        } catch (err) {
+          setMsg(fillEl, "error", err.message);
+          btn.disabled = false;
+          btn.textContent = "Autofill Again";
+        }
+      });
+      document.getElementById("btn-restart-nofill").addEventListener("click", () => startOver());
+      return;
+    }
+  }
+
+  // ── Phase 2: Send fields to backend for classification + AI answers ─────
+  setMsg(fillEl, "info", `<span class="spinner"></span>Analyzing ${fields.length} fields...`);
+  const jobContext = scannedJob ? {
+    title: scannedJob.title || "",
+    company: scannedJob.company || "",
+    description: scannedJob.description || "",
+  } : undefined;
+
+  const apiRes = await authFetch(`${WEB_APP_URL}/api/autofill`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fields, jobContext }),
+  });
+
+  if (!apiRes.ok) {
+    const err = await apiRes.json().catch(() => ({}));
+    throw new Error(err.error || "Autofill API failed");
+  }
+
+  const { answers } = await apiRes.json();
+
+  // ── Phase 3: Inject answers into the page ───────────────────────────────
+  setMsg(fillEl, "info", '<span class="spinner"></span>Filling fields...');
+  const fillResults = await chrome.scripting.executeScript({
+    target: { tabId: appliedTab.id, allFrames: true },
+    func: fillFormFields,
+    args: [answers || []],
+  });
+  const fillResult = fillResults.find(r => r?.result?.filled?.length > 0)?.result
+    || fillResults[0]?.result
+    || { filled: [], skipped: [], review: [] };
+
+  // ── Phase 4: Handle resume file upload separately ───────────────────────
+  if (tailoredResume) {
+    const uploadResults = await chrome.scripting.executeScript({
+      target: { tabId: appliedTab.id, allFrames: true },
+      func: uploadResumeFile,
+      args: [tailoredResume],
+    });
+    const uploaded = uploadResults.find(r => r?.result?.success)?.result;
+    if (uploaded?.success) {
+      fillResult.filled.push({ name: "Resume Upload", confidence: 1, source: "rule" });
+    }
+  }
+
   showFillResult(fillEl, actionsEl, fillResult);
 }
 
 function showFillResult(fillEl, actionsEl, fillResult) {
-  const items = fillResult.results.map(r => {
-    const color = r.filled ? (r.skipped ? "#fbbf24" : "#86efac") : "#6b7280";
-    const dotClass = r.filled ? "filled" : "missed";
-    const label = r.skipped ? "already filled" : r.filled ? "filled" : "not found";
-    return `<div class="fill-result-item">
-      <div class="fill-dot ${dotClass}"></div>
-      <span style="color:${color}">${esc(r.name)}: ${label}</span>
-    </div>`;
-  }).join("");
+  const allItems = [
+    ...(fillResult.filled || []).map(r => {
+      const isReview = r.confidence !== undefined && r.confidence <= 0.8;
+      const color = isReview ? "#fbbf24" : "#86efac";
+      const dotClass = "filled";
+      const label = isReview ? "filled (review)" : r.source === "ai" ? "filled (AI)" : "filled";
+      return `<div class="fill-result-item">
+        <div class="fill-dot ${dotClass}"></div>
+        <span style="color:${color}">${esc(r.name)}: ${label}</span>
+      </div>`;
+    }),
+    ...(fillResult.skipped || []).map(r => `<div class="fill-result-item">
+      <div class="fill-dot filled"></div>
+      <span style="color:#fbbf24">${esc(r.name)}: already filled</span>
+    </div>`),
+    ...(fillResult.review || []).map(r => `<div class="fill-result-item">
+      <div class="fill-dot missed"></div>
+      <span style="color:#6b7280">${esc(r.name)}: needs review</span>
+    </div>`),
+  ];
 
-  fillEl.innerHTML = `<div style="margin-top:10px">${items}</div>`;
+  const filledCount = (fillResult.filled || []).length;
+  const reviewCount = (fillResult.filled || []).filter(r => r.confidence <= 0.8).length + (fillResult.review || []).length;
+  const summary = reviewCount > 0
+    ? `<div class="msg info" style="margin-bottom:8px">Filled ${filledCount} fields. ${reviewCount} need review (yellow highlight).</div>`
+    : `<div class="msg success" style="margin-bottom:8px">Filled ${filledCount} fields.</div>`;
+
+  fillEl.innerHTML = `<div style="margin-top:10px">${summary}${allItems.join("")}</div>`;
 
   actionsEl.innerHTML = `
     <div class="btn-pair">
@@ -782,7 +907,150 @@ function waitForTabLoad(tabId) {
   });
 }
 
-// ─── Manual Panel ────────────────────────────────────────────────────────────
+// ─── Auto Fill Tab ──────────────────────────────────────────────────────────
+document.getElementById("btn-autofill-page").addEventListener("click", async () => {
+  const statusEl = document.getElementById("autofill-status");
+  const actionsEl = document.getElementById("autofill-actions");
+  const btn = document.getElementById("btn-autofill-page");
+  btn.disabled = true;
+  actionsEl.innerHTML = "";
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) throw new Error("No active tab.");
+
+    setMsg(statusEl, "info", '<span class="spinner"></span>Scanning form fields...');
+    const fields = await extractFieldsFromTab(tab.id);
+
+    if (fields.length === 0) {
+      setMsg(statusEl, "info", "No form fields found on this page. Open the application form, then try again.");
+      btn.disabled = false;
+      return;
+    }
+
+    setMsg(statusEl, "info", `<span class="spinner"></span>Analyzing ${fields.length} fields with AI...`);
+    const apiRes = await authFetch(`${WEB_APP_URL}/api/autofill`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fields }),
+    });
+    if (!apiRes.ok) {
+      const err = await apiRes.json().catch(() => ({}));
+      throw new Error(err.error || `Autofill API failed (${apiRes.status})`);
+    }
+    const { answers } = await apiRes.json();
+
+    setMsg(statusEl, "info", '<span class="spinner"></span>Filling fields...');
+    const fillResults = await chrome.scripting.executeScript({
+      target: { tabId: tab.id, allFrames: true },
+      func: fillFormFields,
+      args: [answers || []],
+    });
+    const fillResult = fillResults.find(r => r?.result?.filled?.length > 0)?.result
+      || fillResults[0]?.result
+      || { filled: [], skipped: [], review: [] };
+
+    showFillResult(statusEl, actionsEl, fillResult);
+
+    // Override default Re-fill/Start Over actions with autofill-specific re-run
+    actionsEl.innerHTML = `
+      <button class="btn primary" id="btn-autofill-again" style="margin-top:10px;display:flex;align-items:center;justify-content:center;gap:7px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+        Re-scan & Re-fill
+      </button>
+    `;
+    document.getElementById("btn-autofill-again").addEventListener("click", () => btn.click());
+    btn.disabled = false;
+  } catch (err) {
+    setMsg(statusEl, "error", err.message);
+    btn.disabled = false;
+  }
+});
+
+// ─── Save Job Tab ────────────────────────────────────────────────────────────
+document.getElementById("btn-save-scan").addEventListener("click", async () => {
+  const resultEl = document.getElementById("save-result");
+  const btn = document.getElementById("btn-save-scan");
+  btn.disabled = true;
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) throw new Error("No active tab.");
+
+    setMsg(resultEl, "info", '<span class="spinner"></span>Scanning page...');
+    const scrapeResults = await chrome.scripting.executeScript({
+      target: { tabId: tab.id, allFrames: true },
+      func: scrapeAnyJobPage,
+    });
+    const scraped = scrapeResults.map(r => r?.result).find(r => r && r.description && r.description.length > 50)
+      || scrapeResults[0]?.result;
+
+    if (!scraped || !scraped.description || scraped.description.length < 50) {
+      setMsg(resultEl, "error", "Couldn't find a job description on this page. Try the manual paste option below.");
+      btn.disabled = false;
+      return;
+    }
+
+    let job = { ...scraped };
+
+    // If title or company missing, ask the AI to extract them
+    if (!job.title || !job.company) {
+      setMsg(resultEl, "info", '<span class="spinner"></span>Extracting job details with AI...');
+      try {
+        const aiRes = await authFetch(`${WEB_APP_URL}/api/analyze-job`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobDescription: job.description }),
+        });
+        if (aiRes.ok) {
+          const { analysis } = await aiRes.json();
+          if (analysis) {
+            job.title = job.title || analysis.title || "";
+            job.company = job.company || analysis.company || "";
+            job.location = job.location || analysis.location || "";
+          }
+        }
+      } catch (_) {}
+    }
+
+    setMsg(resultEl, "info", '<span class="spinner"></span>Saving to tracker...');
+    const importRes = await authFetch(`${WEB_APP_URL}/api/jobs/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(job),
+    });
+    if (!importRes.ok) throw new Error(`Server error: ${importRes.status}`);
+
+    resultEl.innerHTML = `
+      <div class="msg success" style="margin-top:10px">✓ Saved to tracker</div>
+      <div class="job-card">
+        <div class="job-title">${esc(job.title || "Untitled")}</div>
+        <div class="job-meta">${esc(job.company || "Unknown company")}${job.location ? " · " + esc(job.location) : ""}</div>
+        <div class="job-section-label" style="margin-top:10px">Description</div>
+        <div class="job-desc-preview">${esc(job.description.slice(0, 300))}${job.description.length > 300 ? "…" : ""}</div>
+      </div>
+      <a href="${WEB_APP_URL}/applications" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:7px;margin-top:10px;padding:9px 14px;background:#0f1f3d;border:1px solid #1e40af;border-radius:8px;color:#93c5fd;text-decoration:none;font-size:13px;font-weight:500">
+        View in Tracker
+      </a>
+    `;
+    btn.disabled = false;
+  } catch (err) {
+    setMsg(resultEl, "error", err.message);
+    btn.disabled = false;
+  }
+});
+
+// Collapsible for "Paste manually instead"
+(() => {
+  const head = document.getElementById("save-paste-toggle");
+  const body = document.getElementById("save-paste-body");
+  head.addEventListener("click", () => {
+    body.classList.toggle("open");
+    head.querySelector(".chevron").textContent = body.classList.contains("open") ? "▲" : "▼";
+  });
+})();
+
+// ─── Manual paste (inside Save Job tab) ─────────────────────────────────────
 const descEl = document.getElementById("manual-desc");
 const sendBtn = document.getElementById("btn-manual-send");
 
@@ -922,132 +1190,785 @@ function scrapeLinkedIn() {
   return { job: { title, company, location, salary, jobType, workplace, description, url } };
 }
 
-// ─── Application form filler (injected into page) ──────────────────────────
-function fillApplicationForm(profile, resumeContent) {
-  function setVal(el, value) {
-    const proto = el.tagName === "TEXTAREA"
-      ? window.HTMLTextAreaElement.prototype
-      : window.HTMLInputElement.prototype;
-    const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
-    setter.call(el, value);
-    el.dispatchEvent(new Event("input",  { bubbles: true }));
-    el.dispatchEvent(new Event("change", { bubbles: true }));
+// ─── Generic job-page scraper (injected into page) ─────────────────────────
+// Tries LinkedIn → common ATS selectors (Greenhouse, Lever, Workday, Ashby,
+// Workable, SmartRecruiters) → falls back to body text. Returns the same
+// shape as scrapeLinkedIn().job so /api/jobs/import accepts it directly.
+function scrapeAnyJobPage() {
+  const url = window.location.href;
+  const host = window.location.hostname;
+
+  function txt(sel) {
+    const el = document.querySelector(sel);
+    return el?.textContent?.trim() || "";
+  }
+  function meta(name) {
+    const el = document.querySelector(`meta[property="${name}"], meta[name="${name}"]`);
+    return el?.getAttribute("content") || "";
   }
 
+  // LinkedIn — reuse selectors from scrapeLinkedIn
+  if (/linkedin\.com/.test(host)) {
+    const title =
+      txt("h1.t-24.t-bold") ||
+      txt(".job-details-jobs-unified-top-card__job-title h1") ||
+      txt("h1");
+    const company =
+      txt(".job-details-jobs-unified-top-card__company-name a") ||
+      txt("[data-test-employer-name]") ||
+      txt(".jobs-unified-top-card__company-name");
+    const location =
+      txt(".job-details-jobs-unified-top-card__primary-description-without-tagline span") ||
+      txt(".job-details-jobs-unified-top-card__tertiary-description-container span") ||
+      txt(".jobs-unified-top-card__bullet");
+    const description =
+      txt(".jobs-description__content .jobs-description-content__text") ||
+      txt("#job-details") ||
+      txt(".jobs-box__html-content");
+    if (description) return { title, company, location, description, url };
+  }
+
+  // Greenhouse
+  let description =
+    txt("#content") ||
+    txt(".content") ||
+    txt("[data-mapped='true']");
+  let title = txt("h1.app-title") || txt(".app-title");
+  let company = txt(".company-name") || txt(".main-header-text") || "";
+  let location = txt(".location");
+
+  // Lever
+  if (!description) {
+    description = txt(".posting-page .section-wrapper") || txt(".posting-description");
+    title = title || txt(".posting-headline h2") || txt(".posting-name");
+    location = location || txt(".sort-by-time .posting-category");
+  }
+
+  // Workday — they wrap description in a data-automation-id
+  if (!description) {
+    description =
+      txt('[data-automation-id="jobPostingDescription"]') ||
+      txt('[data-automation-id="jobDescription"]');
+    title = title || txt('[data-automation-id="jobPostingHeader"]');
+    location = location || txt('[data-automation-id="locations"]');
+  }
+
+  // Ashby
+  if (!description) {
+    description = txt('[class*="_descriptionText"]') || txt("._jobPostingPage_description_1mi6");
+    title = title || txt('h1[class*="_title"]') || txt("h1");
+  }
+
+  // Workable / SmartRecruiters / generic
+  if (!description) {
+    description =
+      txt("section.jobAd") ||
+      txt('[class*="job-description"]') ||
+      txt('[class*="JobDescription"]') ||
+      txt('[class*="description"]') ||
+      txt('article');
+  }
+
+  // Generic fallbacks
+  title = title || txt("h1") || meta("og:title") || document.title || "";
+  company = company || meta("og:site_name") || "";
+
+  // Last resort: body innerText (with nav/header/footer pruned)
+  if (!description || description.length < 200) {
+    const main =
+      document.querySelector("main") ||
+      document.querySelector("[role='main']") ||
+      document.querySelector("article") ||
+      document.body;
+    if (main) {
+      const clone = main.cloneNode(true);
+      clone.querySelectorAll("nav, header, footer, script, style, aside").forEach(n => n.remove());
+      const candidate = (clone.innerText || "").trim();
+      if (candidate.length > description.length) description = candidate;
+    }
+  }
+
+  // Cleanup
+  description = description.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  if (description.length > 12000) description = description.slice(0, 12000);
+
+  return { title, company, location, description, url };
+}
+
+// ─── Find and click Apply button on intermediate pages (injected into page) ─
+function findAndClickApplyButton() {
+  // Common Apply button patterns on ATS job description pages
+  const selectors = [
+    // Generic apply buttons
+    'a[href*="apply"]',
+    'button[class*="apply"]',
+    'a[class*="apply"]',
+    'button[data-action*="apply"]',
+    // Greenhouse
+    '#grnhse_app a[href*="apply"]',
+    '.opening-apply a',
+    'a.apply-button',
+    'a.btn-apply',
+    // Lever
+    '.posting-apply a',
+    'a.postings-btn',
+    '.apply-button a',
+    // Workday
+    'a[data-automation-id*="apply"]',
+    'button[data-automation-id*="apply"]',
+    // Generic text-based matching
+    'a[title*="Apply" i]',
+    'button[title*="Apply" i]',
+  ];
+
+  // Try specific selectors first
+  for (const sel of selectors) {
+    try {
+      const el = document.querySelector(sel);
+      if (el && el.offsetParent !== null) {
+        const willOpenNewTab = el.tagName === "A" && (el.target === "_blank" || el.getAttribute("rel")?.includes("noopener"));
+        el.click();
+        return { success: true, newTab: willOpenNewTab };
+      }
+    } catch (_) {}
+  }
+
+  // Fallback: find any visible button/link containing "Apply" text
+  const candidates = [
+    ...document.querySelectorAll('a, button, [role="button"]')
+  ].filter(el => {
+    if (!el.offsetParent) return false;
+    const text = el.textContent?.trim() || "";
+    // Must say "Apply" but not "Applied" or "Apply with LinkedIn" (already handled)
+    return /^apply(\s+now)?$/i.test(text) || /^apply\s+(for|to)\s+/i.test(text);
+  });
+
+  if (candidates.length > 0) {
+    const el = candidates[0];
+    const willOpenNewTab = el.tagName === "A" && (el.target === "_blank" || el.getAttribute("rel")?.includes("noopener"));
+    el.click();
+    return { success: true, newTab: willOpenNewTab };
+  }
+
+  return { success: false };
+}
+
+// ─── Phase 1: Extract form fields (injected into page) ─────────────────────
+function extractFormFields() {
+  // Resolve a human-readable label for any form element
   function labelFor(el) {
-    // aria-label takes priority
     const al = el.getAttribute("aria-label");
-    if (al) return al.toLowerCase();
-    // <label for="id">
+    if (al) return al.replace(/\s*\*\s*/g, "").trim();
     if (el.id) {
       const lbl = document.querySelector(`label[for="${el.id}"]`);
-      if (lbl) return lbl.textContent.toLowerCase();
+      if (lbl) return lbl.textContent.replace(/\s*\*\s*/g, "").trim();
     }
-    // aria-labelledby
     const llby = el.getAttribute("aria-labelledby");
     if (llby) {
       const lbl = document.getElementById(llby.split(" ")[0]);
-      if (lbl) return lbl.textContent.toLowerCase();
+      if (lbl) return lbl.textContent.replace(/\s*\*\s*/g, "").trim();
     }
-    // Gem / custom forms: walk up to find a sibling label span or legend
+    const desc = el.getAttribute("aria-describedby");
+    if (desc) {
+      const lbl = document.getElementById(desc.split(" ")[0]);
+      if (lbl) return lbl.textContent.replace(/\s*\*\s*/g, "").trim();
+    }
+    // Walk up parents to find nearby label text
     let parent = el.parentElement;
     for (let i = 0; i < 6 && parent; i++) {
-      // Direct child span/label that precedes the input's subtree
-      const labelEl = parent.querySelector(
-        'span:not(span span), label, legend'
-      );
+      const labelEl = parent.querySelector("span:not(span span), label, legend");
       if (labelEl) {
         const text = labelEl.textContent.replace(/\s*\*\s*/g, "").trim();
-        if (text) return text.toLowerCase();
+        if (text) return text;
       }
       parent = parent.parentElement;
     }
     return "";
   }
 
-  const results = [];
-  const filled = new Set();
-
-  function fill(el, name, value) {
-    if (!el || !value || filled.has(name)) return;
-    if (el.value === value) {
-      results.push({ name, filled: true, skipped: true });
-    } else {
-      setVal(el, value);
-      results.push({ name, filled: true, skipped: false });
+  // Build a unique CSS selector for an element
+  function selectorFor(el) {
+    if (el.id) return `#${CSS.escape(el.id)}`;
+    if (el.name) {
+      const sel = `${el.tagName.toLowerCase()}[name="${CSS.escape(el.name)}"]`;
+      if (document.querySelectorAll(sel).length === 1) return sel;
     }
-    filled.add(name);
+    // Positional fallback
+    const tag = el.tagName.toLowerCase();
+    const siblings = Array.from(el.parentElement?.children || []).filter(c => c.tagName === el.tagName);
+    const idx = siblings.indexOf(el);
+    const parentSel = el.parentElement?.id
+      ? `#${CSS.escape(el.parentElement.id)}`
+      : el.parentElement?.tagName?.toLowerCase() || "body";
+    return `${parentSel} > ${tag}:nth-of-type(${idx + 1})`;
   }
 
-  // Today's date (MM/DD/YY)
-  const now = new Date();
-  const todayStr = `${String(now.getMonth()+1).padStart(2,"0")}/${String(now.getDate()).padStart(2,"0")}/${String(now.getFullYear()).slice(-2)}`;
+  function isVisible(el) {
+    if (el.getAttribute("aria-hidden") === "true") return false;
+    if (el.type === "hidden") return false;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return false;
+    const style = window.getComputedStyle(el);
+    return style.display !== "none" && style.visibility !== "hidden";
+  }
 
-  // Label → profile value mapping
-  const locationStr = [profile.city, profile.state].filter(Boolean).join(", ");
+  const fields = [];
+  const seen = new Set();
 
-  const labelMap = [
-    [/first\s*name/,                          "First Name",       profile.firstName],
-    [/last\s*name/,                           "Last Name",        profile.lastName],
-    [/email/,                                 "Email",            profile.email],
-    [/phone/,                                 "Phone",            profile.phone],
-    [/linkedin/,                              "LinkedIn",         profile.linkedin],
-    [/website|portfolio|personal url/,        "Website",          profile.website],
-    [/^location$|city.*state|where.*located/, "Location",         locationStr],
-    [/address line 1|street address(?! 2)/,   "Address Line 1",   profile.addressLine1],
-    [/address line 2/,                        "Address Line 2",   profile.addressLine2],
-    [/home address city|address city/,        "City",             profile.city],
-    [/home address state|address state/,      "State",            profile.state],
-    [/zip|postal/,                            "Zip",              profile.zip],
-    [/today.{0,10}date|date.{0,10}application/, "Date",           todayStr],
-  ];
-
-  // Collect all fillable inputs (skip hidden, React-select internals)
+  // ── Inputs + Textareas ──────────────────────────────────────────────────
   const inputs = document.querySelectorAll(
-    'input[type="text"], input[type="email"], input[type="tel"], input:not([type])'
+    'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="file"]), textarea'
   );
 
-  inputs.forEach(input => {
-    if (input.getAttribute("aria-hidden") === "true") return;
-    if (input.classList.contains("select__input")) return; // React-select combobox
+  // Collect radio groups separately
+  const radioGroups = {};
 
-    const lbl = labelFor(input);
-    for (const [pattern, name, value] of labelMap) {
-      if (pattern.test(lbl) && value) {
-        fill(input, name, value);
-        break;
+  inputs.forEach(el => {
+    if (!isVisible(el)) return;
+    if (el.classList.contains("select__input")) return; // React-select
+
+    if (el.type === "radio") {
+      const groupName = el.name || el.id;
+      if (!groupName) return;
+      if (!radioGroups[groupName]) {
+        radioGroups[groupName] = { elements: [], label: "" };
       }
+      const radioLabel = labelFor(el) || el.value;
+      radioGroups[groupName].elements.push({ value: el.value, label: radioLabel, checked: el.checked });
+      // Use the group-level label (fieldset/legend or first radio's parent label)
+      if (!radioGroups[groupName].label) {
+        const fieldset = el.closest("fieldset");
+        if (fieldset) {
+          const legend = fieldset.querySelector("legend");
+          if (legend) radioGroups[groupName].label = legend.textContent.replace(/\s*\*\s*/g, "").trim();
+        }
+        if (!radioGroups[groupName].label) {
+          // Try to find a group label in parent
+          let p = el.parentElement;
+          for (let i = 0; i < 4 && p; i++) {
+            const heading = p.querySelector("h3, h4, p, span.label, label");
+            if (heading && heading.textContent.trim().length > 2) {
+              radioGroups[groupName].label = heading.textContent.replace(/\s*\*\s*/g, "").trim();
+              break;
+            }
+            p = p.parentElement;
+          }
+        }
+      }
+      return;
     }
+
+    if (el.type === "checkbox") {
+      const id = selectorFor(el);
+      if (seen.has(id)) return;
+      seen.add(id);
+      const label = labelFor(el);
+      fields.push({
+        id,
+        tagName: "checkbox",
+        inputType: "checkbox",
+        name: el.name || "",
+        label,
+        placeholder: "",
+        ariaLabel: el.getAttribute("aria-label") || "",
+        required: el.required,
+        options: ["true", "false"],
+        currentValue: el.checked ? "true" : "",
+        autocomplete: el.getAttribute("autocomplete") || "",
+        fieldSignature: btoa(unescape(encodeURIComponent(label + "|" + (el.name || "") + "|"))),
+      });
+      return;
+    }
+
+    // Regular text input or textarea
+    const id = selectorFor(el);
+    if (seen.has(id)) return;
+    seen.add(id);
+
+    const label = labelFor(el);
+    fields.push({
+      id,
+      tagName: el.tagName.toLowerCase() === "textarea" ? "textarea" : "input",
+      inputType: el.type || "text",
+      name: el.name || "",
+      label,
+      placeholder: el.placeholder || "",
+      ariaLabel: el.getAttribute("aria-label") || "",
+      required: el.required,
+      options: [],
+      currentValue: el.value || "",
+      autocomplete: el.getAttribute("autocomplete") || "",
+      fieldSignature: btoa(unescape(encodeURIComponent(label + "|" + (el.name || "") + "|" + (el.placeholder || "")))),
+    });
   });
 
-  // Report any fields we couldn't find
-  for (const [, name] of labelMap) {
-    if (!filled.has(name)) results.push({ name, filled: false });
+  // ── Radio groups ────────────────────────────────────────────────────────
+  for (const [groupName, group] of Object.entries(radioGroups)) {
+    const options = group.elements.map(r => r.label || r.value);
+    const checkedEl = group.elements.find(r => r.checked);
+    const sel = `input[name="${CSS.escape(groupName)}"]`;
+    fields.push({
+      id: sel,
+      tagName: "radio-group",
+      inputType: "radio",
+      name: groupName,
+      label: group.label || groupName,
+      placeholder: "",
+      ariaLabel: "",
+      required: false,
+      options,
+      currentValue: checkedEl ? (checkedEl.label || checkedEl.value) : "",
+      autocomplete: "",
+      fieldSignature: btoa(unescape(encodeURIComponent((group.label || groupName) + "|" + groupName + "|"))),
+    });
   }
 
-  // Try to upload resume to file input if resumeContent is provided
-  if (resumeContent) {
-    const fileInputs = Array.from(document.querySelectorAll('input[type="file"]'));
-    const resumeInput = fileInputs.find(input => {
-      const lbl = labelFor(input);
-      return /resume|cv/i.test(lbl);
-    }) || fileInputs[0];
+  // ── Native Selects ───────────────────────────────────────────────────────
+  document.querySelectorAll("select").forEach(el => {
+    if (!isVisible(el)) return;
+    const id = selectorFor(el);
+    if (seen.has(id)) return;
+    seen.add(id);
 
-    if (resumeInput) {
-      try {
-        const file = new File([resumeContent], "tailored-resume.txt", { type: "text/plain" });
-        const dt = new DataTransfer();
-        dt.items.add(file);
-        resumeInput.files = dt.files;
-        resumeInput.dispatchEvent(new Event("change", { bubbles: true }));
-        results.push({ name: "Resume Upload", filled: true, skipped: false });
-      } catch (e) {
-        results.push({ name: "Resume Upload", filled: false });
-      }
+    const label = labelFor(el);
+    const options = Array.from(el.options)
+      .filter(o => o.value && o.value !== "" && !o.disabled)
+      .map(o => o.text.trim());
+
+    fields.push({
+      id,
+      tagName: "select",
+      inputType: "select",
+      name: el.name || "",
+      label,
+      placeholder: "",
+      ariaLabel: el.getAttribute("aria-label") || "",
+      required: el.required,
+      options,
+      currentValue: el.options[el.selectedIndex]?.text?.trim() || "",
+      autocomplete: el.getAttribute("autocomplete") || "",
+      fieldSignature: btoa(unescape(encodeURIComponent(label + "|" + (el.name || "") + "|"))),
+    });
+  });
+
+  // ── Contenteditable divs (Workday, rich text editors) ──────────────────
+  document.querySelectorAll('[contenteditable="true"], [contenteditable=""]').forEach(el => {
+    if (!isVisible(el)) return;
+    // Skip tiny inline editables (e.g. single-word spans)
+    const rect = el.getBoundingClientRect();
+    if (rect.height < 20) return;
+
+    const id = selectorFor(el);
+    if (seen.has(id)) return;
+    seen.add(id);
+
+    const label = labelFor(el);
+    fields.push({
+      id,
+      tagName: "textarea", // treat as textarea for the backend
+      inputType: "contenteditable",
+      name: el.getAttribute("data-name") || el.getAttribute("name") || "",
+      label,
+      placeholder: el.getAttribute("placeholder") || el.getAttribute("data-placeholder") || "",
+      ariaLabel: el.getAttribute("aria-label") || "",
+      required: el.getAttribute("aria-required") === "true",
+      options: [],
+      currentValue: el.textContent?.trim() || "",
+      autocomplete: "",
+      fieldSignature: btoa(unescape(encodeURIComponent(label + "|contenteditable|"))),
+    });
+  });
+
+  // ── ARIA listbox / combobox (custom dropdowns — React-Select, Greenhouse, Lever) ──
+  document.querySelectorAll('[role="listbox"], [role="combobox"]').forEach(el => {
+    if (!isVisible(el)) return;
+    const id = selectorFor(el);
+    if (seen.has(id)) return;
+    seen.add(id);
+
+    const label = labelFor(el);
+    // Collect options from child [role="option"] elements
+    const optionEls = el.querySelectorAll('[role="option"]');
+    const options = Array.from(optionEls).map(o => o.textContent.trim()).filter(Boolean);
+
+    // Find current selected value
+    const selected = el.querySelector('[aria-selected="true"]');
+    const currentValue = selected?.textContent?.trim()
+      || el.getAttribute("aria-activedescendant") && document.getElementById(el.getAttribute("aria-activedescendant"))?.textContent?.trim()
+      || "";
+
+    fields.push({
+      id,
+      tagName: "select", // treat as select for the backend
+      inputType: "aria-listbox",
+      name: el.getAttribute("data-name") || el.getAttribute("name") || "",
+      label,
+      placeholder: el.getAttribute("placeholder") || "",
+      ariaLabel: el.getAttribute("aria-label") || "",
+      required: el.getAttribute("aria-required") === "true",
+      options,
+      currentValue,
+      autocomplete: "",
+      fieldSignature: btoa(unescape(encodeURIComponent(label + "|aria-listbox|" + options.slice(0, 3).join(",")))),
+    });
+  });
+
+  // ── React-Select containers (css class-based detection) ────────────────
+  document.querySelectorAll('.select__control, .css-1s2u09g-control, [class*="select__control"]').forEach(container => {
+    // Walk up to the React-Select root
+    const root = container.closest('[class*="select__container"], [class*="-container"]') || container.parentElement;
+    if (!root || !isVisible(root)) return;
+    const id = selectorFor(root);
+    if (seen.has(id)) return;
+    seen.add(id);
+
+    const label = labelFor(root);
+    // React-Select renders options in a menu portal — they may not be in DOM yet
+    // Check for a hidden input that React-Select syncs with
+    const hiddenInput = root.querySelector('input[type="hidden"]');
+    const currentValue = root.querySelector('.select__single-value, [class*="singleValue"]')?.textContent?.trim()
+      || hiddenInput?.value || "";
+
+    // Try to find options if menu is open
+    const menu = root.querySelector('.select__menu, [class*="select__menu"]')
+      || document.querySelector('.select__menu-portal [class*="select__menu"]');
+    const options = menu
+      ? Array.from(menu.querySelectorAll('.select__option, [class*="select__option"]')).map(o => o.textContent.trim())
+      : [];
+
+    fields.push({
+      id,
+      tagName: "select",
+      inputType: "react-select",
+      name: hiddenInput?.name || "",
+      label,
+      placeholder: root.querySelector('.select__placeholder, [class*="placeholder"]')?.textContent?.trim() || "",
+      ariaLabel: root.getAttribute("aria-label") || "",
+      required: false,
+      options,
+      currentValue,
+      autocomplete: "",
+      fieldSignature: btoa(unescape(encodeURIComponent(label + "|react-select|"))),
+    });
+  });
+
+  // ── ARIA radio groups (custom radio buttons, not native <input>) ───────
+  document.querySelectorAll('[role="radiogroup"]').forEach(el => {
+    if (!isVisible(el)) return;
+    const id = selectorFor(el);
+    if (seen.has(id)) return;
+    seen.add(id);
+
+    const label = labelFor(el);
+    const radioEls = el.querySelectorAll('[role="radio"]');
+    const options = Array.from(radioEls).map(r => r.textContent?.trim() || r.getAttribute("aria-label") || "").filter(Boolean);
+    const checked = el.querySelector('[role="radio"][aria-checked="true"]');
+    const currentValue = checked?.textContent?.trim() || "";
+
+    fields.push({
+      id,
+      tagName: "radio-group",
+      inputType: "aria-radio",
+      name: el.getAttribute("data-name") || "",
+      label,
+      placeholder: "",
+      ariaLabel: el.getAttribute("aria-label") || "",
+      required: el.getAttribute("aria-required") === "true",
+      options,
+      currentValue,
+      autocomplete: "",
+      fieldSignature: btoa(unescape(encodeURIComponent(label + "|aria-radio|" + options.slice(0, 3).join(",")))),
+    });
+  });
+
+  // ── ARIA checkboxes (custom, not native <input>) ───────────────────────
+  document.querySelectorAll('[role="checkbox"]').forEach(el => {
+    if (!isVisible(el)) return;
+    // Skip if it's a real input we already captured
+    if (el.tagName.toLowerCase() === "input") return;
+    const id = selectorFor(el);
+    if (seen.has(id)) return;
+    seen.add(id);
+
+    const label = labelFor(el) || el.textContent?.trim() || "";
+    const isChecked = el.getAttribute("aria-checked") === "true";
+
+    fields.push({
+      id,
+      tagName: "checkbox",
+      inputType: "aria-checkbox",
+      name: el.getAttribute("data-name") || "",
+      label,
+      placeholder: "",
+      ariaLabel: el.getAttribute("aria-label") || "",
+      required: el.getAttribute("aria-required") === "true",
+      options: ["true", "false"],
+      currentValue: isChecked ? "true" : "",
+      autocomplete: "",
+      fieldSignature: btoa(unescape(encodeURIComponent(label + "|aria-checkbox|"))),
+    });
+  });
+
+  return fields;
+}
+
+// ─── Phase 3: Fill form fields with answers (injected into page) ───────────
+async function fillFormFields(answers) {
+  function setVal(el, value) {
+    const proto = el.tagName === "TEXTAREA"
+      ? window.HTMLTextAreaElement.prototype
+      : window.HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+    if (setter) {
+      setter.call(el, value);
     } else {
-      results.push({ name: "Resume Upload", filled: false });
+      el.value = value;
+    }
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  const filled = [];
+  const skipped = [];
+  const review = [];
+
+  for (const answer of answers) {
+    if (!answer.value || answer.confidence === 0) continue;
+
+    const el = document.querySelector(answer.id);
+    if (!el) {
+      review.push({ name: answer.classification || answer.id, reason: "element not found" });
+      continue;
+    }
+
+    const tagName = el.tagName.toLowerCase();
+    const inputType = el.type?.toLowerCase();
+
+    try {
+      // ── Select ────────────────────────────────────────────────────────
+      if (tagName === "select") {
+        const opts = Array.from(el.options);
+        // Try exact match first, then case-insensitive
+        let match = opts.find(o => o.text.trim() === answer.value);
+        if (!match) match = opts.find(o => o.text.trim().toLowerCase() === answer.value.toLowerCase());
+        if (!match) match = opts.find(o => o.text.trim().toLowerCase().includes(answer.value.toLowerCase()));
+        if (match) {
+          el.value = match.value;
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+          filled.push({ name: answer.classification || el.name, confidence: answer.confidence, source: answer.source });
+        } else {
+          review.push({ name: answer.classification || el.name, reason: "no matching option" });
+        }
+        continue;
+      }
+
+      // ── Radio group ───────────────────────────────────────────────────
+      if (inputType === "radio" || answer.id.includes('input[name=')) {
+        const radios = document.querySelectorAll(answer.id);
+        let matched = false;
+        radios.forEach(radio => {
+          const radioLabel = radio.parentElement?.textContent?.trim() || radio.value;
+          if (radioLabel.toLowerCase().includes(answer.value.toLowerCase()) ||
+              radio.value.toLowerCase() === answer.value.toLowerCase()) {
+            radio.checked = true;
+            radio.dispatchEvent(new Event("change", { bubbles: true }));
+            radio.dispatchEvent(new Event("click", { bubbles: true }));
+            matched = true;
+          }
+        });
+        if (matched) {
+          filled.push({ name: answer.classification || el.name, confidence: answer.confidence, source: answer.source });
+        } else {
+          review.push({ name: answer.classification || el.name, reason: "no matching radio" });
+        }
+        continue;
+      }
+
+      // ── Checkbox ──────────────────────────────────────────────────────
+      if (inputType === "checkbox") {
+        const shouldCheck = /^(yes|true|1)$/i.test(answer.value);
+        if (el.checked !== shouldCheck) {
+          el.checked = shouldCheck;
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+          el.dispatchEvent(new Event("click", { bubbles: true }));
+        }
+        filled.push({ name: answer.classification || el.name, confidence: answer.confidence, source: answer.source });
+        continue;
+      }
+
+      // ── Contenteditable ─────────────────────────────────────────────
+      if (el.getAttribute("contenteditable") === "true" || el.getAttribute("contenteditable") === "") {
+        if (el.textContent?.trim() && el.textContent.trim() === answer.value) {
+          skipped.push({ name: answer.classification || answer.id });
+          continue;
+        }
+        el.focus();
+        el.textContent = answer.value;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+        el.blur();
+        filled.push({ name: answer.classification || answer.id, confidence: answer.confidence, source: answer.source });
+        if (answer.confidence <= 0.8) {
+          el.style.outline = "2px solid #fbbf24";
+          el.style.outlineOffset = "1px";
+        }
+        continue;
+      }
+
+      // ── ARIA listbox / combobox (custom dropdown) ─────────────────────
+      if (el.getAttribute("role") === "listbox" || el.getAttribute("role") === "combobox") {
+        const optionEls = el.querySelectorAll('[role="option"]');
+        let matched = false;
+        optionEls.forEach(opt => {
+          const text = opt.textContent?.trim();
+          if (text && (text === answer.value || text.toLowerCase() === answer.value.toLowerCase())) {
+            opt.click();
+            matched = true;
+          }
+        });
+        if (!matched && optionEls.length === 0) {
+          // Menu may need to be opened first — try clicking the element, then retry
+          el.click();
+          await new Promise(r => setTimeout(r, 300));
+          const retryOpts = el.querySelectorAll('[role="option"]');
+          retryOpts.forEach(opt => {
+            const text = opt.textContent?.trim();
+            if (text && (text === answer.value || text.toLowerCase() === answer.value.toLowerCase())) {
+              opt.click();
+              matched = true;
+            }
+          });
+        }
+        filled.push({ name: answer.classification || answer.id, confidence: matched ? answer.confidence : 0.3, source: answer.source });
+        continue;
+      }
+
+      // ── React-Select container ────────────────────────────────────────
+      if (el.querySelector && (el.querySelector('.select__control, [class*="select__control"]'))) {
+        // Click to open the menu
+        const control = el.querySelector('.select__control, [class*="select__control"]');
+        if (control) control.click();
+        await new Promise(r => setTimeout(r, 300));
+
+        // Look for menu options (may be in a portal)
+        const menu = el.querySelector('.select__menu, [class*="select__menu"]')
+          || document.querySelector('.select__menu-portal .select__menu, [class*="menu-portal"] [class*="select__menu"]');
+        let matched = false;
+        if (menu) {
+          const opts = menu.querySelectorAll('.select__option, [class*="select__option"]');
+          opts.forEach(opt => {
+            const text = opt.textContent?.trim();
+            if (text && (text === answer.value || text.toLowerCase() === answer.value.toLowerCase()
+                || text.toLowerCase().includes(answer.value.toLowerCase()))) {
+              opt.click();
+              matched = true;
+            }
+          });
+        }
+        // Also try typing into the React-Select input
+        if (!matched) {
+          const searchInput = el.querySelector('.select__input input, input[class*="select__input"]');
+          if (searchInput) {
+            setVal(searchInput, answer.value);
+            await new Promise(r => setTimeout(r, 500));
+            // Click the first matching option
+            const filteredMenu = el.querySelector('.select__menu, [class*="select__menu"]')
+              || document.querySelector('.select__menu-portal .select__menu');
+            if (filteredMenu) {
+              const firstOpt = filteredMenu.querySelector('.select__option, [class*="select__option"]');
+              if (firstOpt) { firstOpt.click(); matched = true; }
+            }
+          }
+        }
+        filled.push({ name: answer.classification || answer.id, confidence: matched ? answer.confidence : 0.3, source: answer.source });
+        continue;
+      }
+
+      // ── ARIA radiogroup ───────────────────────────────────────────────
+      if (el.getAttribute("role") === "radiogroup") {
+        const radioEls = el.querySelectorAll('[role="radio"]');
+        let matched = false;
+        radioEls.forEach(r => {
+          const text = r.textContent?.trim() || r.getAttribute("aria-label") || "";
+          if (text.toLowerCase().includes(answer.value.toLowerCase()) ||
+              answer.value.toLowerCase().includes(text.toLowerCase())) {
+            r.click();
+            r.setAttribute("aria-checked", "true");
+            matched = true;
+          }
+        });
+        filled.push({ name: answer.classification || answer.id, confidence: matched ? answer.confidence : 0.3, source: answer.source });
+        continue;
+      }
+
+      // ── ARIA checkbox ─────────────────────────────────────────────────
+      if (el.getAttribute("role") === "checkbox") {
+        const shouldCheck = /^(yes|true|1)$/i.test(answer.value);
+        const isChecked = el.getAttribute("aria-checked") === "true";
+        if (isChecked !== shouldCheck) {
+          el.click();
+        }
+        filled.push({ name: answer.classification || answer.id, confidence: answer.confidence, source: answer.source });
+        continue;
+      }
+
+      // ── Input / Textarea ──────────────────────────────────────────────
+      if (el.value && el.value === answer.value) {
+        skipped.push({ name: answer.classification || el.name });
+        continue;
+      }
+      if (el.value && answer.confidence < 0.9) {
+        // Don't overwrite existing values with low-confidence answers
+        skipped.push({ name: answer.classification || el.name });
+        continue;
+      }
+      setVal(el, answer.value);
+      filled.push({ name: answer.classification || el.name, confidence: answer.confidence, source: answer.source });
+
+      // Highlight low-confidence fields for review
+      if (answer.confidence <= 0.8) {
+        el.style.outline = "2px solid #fbbf24";
+        el.style.outlineOffset = "1px";
+      }
+    } catch (err) {
+      review.push({ name: answer.classification || answer.id, reason: err.message });
     }
   }
 
-  return { results };
+  return { filled, skipped, review };
+}
+
+// ─── Resume file upload (injected into page) ──────────────────────────────
+function uploadResumeFile(resumeContent) {
+  function labelFor(el) {
+    const al = el.getAttribute("aria-label");
+    if (al) return al.toLowerCase();
+    if (el.id) {
+      const lbl = document.querySelector(`label[for="${el.id}"]`);
+      if (lbl) return lbl.textContent.toLowerCase();
+    }
+    let parent = el.parentElement;
+    for (let i = 0; i < 4 && parent; i++) {
+      const labelEl = parent.querySelector("span, label");
+      if (labelEl) return labelEl.textContent.toLowerCase();
+      parent = parent.parentElement;
+    }
+    return "";
+  }
+
+  const fileInputs = Array.from(document.querySelectorAll('input[type="file"]'));
+  const resumeInput = fileInputs.find(input => /resume|cv/i.test(labelFor(input))) || fileInputs[0];
+
+  if (!resumeInput) return { success: false };
+
+  try {
+    const file = new File([resumeContent], "tailored-resume.txt", { type: "text/plain" });
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    resumeInput.files = dt.files;
+    resumeInput.dispatchEvent(new Event("change", { bubbles: true }));
+    return { success: true };
+  } catch (e) {
+    return { success: false };
+  }
 }

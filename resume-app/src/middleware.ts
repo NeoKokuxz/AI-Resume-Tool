@@ -42,6 +42,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/jobs/import|api/resume|api/generate-resume|api/generate-pdf|api/analyze-job|api/classify-email|api/ai-worker).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/jobs/import|api/resume|api/generate-resume|api/generate-pdf|api/analyze-job|api/classify-email|api/ai-worker|api/autofill|api/resume-data).*)",
   ],
 };

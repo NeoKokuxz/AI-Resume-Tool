@@ -33,50 +33,76 @@ GEMINI_API_KEY=AIza...
 ```
 src/
 ├── app/
-│   ├── (app)/                         # Authenticated route group
-│   │   ├── layout.tsx                 # Auth shell + hydration + onboarding redirect
-│   │   ├── page.tsx                   # Dashboard
-│   │   ├── resume/page.tsx            # Resume manager
-│   │   ├── jobs/page.tsx              # Job listings + ATS scoring
-│   │   ├── applications/page.tsx      # Kanban board
-│   │   ├── email/page.tsx             # Email monitor
-│   │   └── profile/page.tsx          # User profile editor
-│   ├── onboarding/page.tsx            # First-login onboarding flow
-│   ├── login/page.tsx                 # Sign in / sign up
+│   ├── (app)/                              # Authenticated route group
+│   │   ├── layout.tsx                      # Auth shell + hydration + onboarding redirect
+│   │   ├── dashboard/page.tsx              # Stats, pipeline, recent activity
+│   │   ├── resume/page.tsx                 # Resume manager
+│   │   ├── jobs/page.tsx                   # Job listings + ATS scoring
+│   │   ├── applications/page.tsx           # Kanban board
+│   │   ├── email/page.tsx                  # Email monitor
+│   │   ├── profile/page.tsx                # User profile editor
+│   │   ├── study/page.tsx                  # Study plan (Interview Prep)
+│   │   └── interview/page.tsx              # Mock interview stub (Interview Prep)
+│   ├── onboarding/page.tsx                 # First-login onboarding flow
+│   ├── login/page.tsx                      # Sign in / sign up
 │   └── api/
-│       ├── extract-resume/            # Gemini resume field extraction
-│       ├── analyze-job/               # Gemini job analysis
-│       ├── ats-score/                 # Gemini ATS scoring (Chrome extension)
-│       ├── generate-resume/           # Gemini resume tailoring + cover letter
-│       ├── generate-pdf/              # PDF generation
-│       ├── parse-pdf/                 # PDF text extraction
-│       ├── classify-email/            # Gemini email classification
-│       ├── profile/                   # Authenticated user profile (Chrome extension)
-│       ├── resume/                    # Authenticated base resume (Chrome extension)
-│       ├── jobs/import/               # Save job + create application (Chrome extension)
-│       └── applications/update/       # Update application status (Chrome extension)
+│       ├── extract-resume/                 # Gemini resume field extraction
+│       ├── analyze-job/                    # Gemini job analysis
+│       ├── ats-score/                      # Gemini ATS scoring (Chrome extension)
+│       ├── generate-resume/                # Gemini resume tailoring + cover letter
+│       ├── generate-pdf/, parse-pdf/       # PDF generation + extraction
+│       ├── classify-email/                 # Gemini email classification
+│       ├── autofill/                       # Form-field autofill (rules + AI)
+│       ├── resume-data/                    # Rich extracted profile (read + extract)
+│       ├── profile/, resume/               # Auth'd profile + base resume (Chrome ext)
+│       ├── jobs/import/                    # Save job + create application (Chrome ext)
+│       ├── applications/update/            # Update application status (Chrome ext)
+│       └── study-plan/                     # Study plan endpoints
+│           ├── route.ts                    # GET cached plan / POST generate plan
+│           ├── chapter/route.ts            # POST append a single chapter
+│           └── lesson/route.ts             # POST generate detailed lesson content
 ├── components/
-│   ├── ui/                            # Button, Badge, Modal, ATSScoreRing
-│   ├── applications/
-│   │   ├── ApplicationCard.tsx        # Draggable card — click upper to view job details
-│   │   ├── KanbanColumn.tsx           # Droppable kanban column
-│   │   ├── ResumeModal.tsx            # Tailored resume + cover letter viewer
-│   │   └── JobDetailModal.tsx         # Full job listing popup (salary, ATS, description)
-│   ├── jobs/JobCard.tsx               # Job card with ATS breakdown bars
-│   ├── resume/                        # ResumeUploader, ResumeEditor, ResumeViewer
-│   ├── email/                         # EmailSummaryBar, EmailGroup, EmailCard, AddEmailModal
-│   └── profile/                       # ProfileField, SkillEditor
+│   ├── ui/                                 # Generic primitives — Button, Badge, Modal, ATSScoreRing, StatTile
+│   ├── layout/Sidebar.tsx                  # Nav with expandable groups (Interview Prep)
+│   ├── applications/                       # ApplicationCard, KanbanColumn, ResumeModal, JobDetailModal
+│   ├── jobs/                                # JobCard, AddJobModal
+│   ├── resume/                             # ResumeUploader, ResumeEditor, ResumeViewer
+│   ├── email/                              # EmailSummaryBar, EmailGroup, EmailCard, AddEmailModal
+│   ├── profile/                            # ProfileField, SkillEditor
+│   └── study/                              # Study feature — composable pieces
+│       ├── StudyHeader.tsx                 # Top status bar (avatar, skills, chat toggle)
+│       ├── StudyPlanGenerator.tsx          # Prompt textarea + model picker + Generate
+│       ├── ChapterSections.tsx             # Cards grouped + collapsible by difficulty
+│       ├── StudyChapterCard.tsx            # Single chapter card
+│       ├── AddChapterCard.tsx              # "+ Add a topic" tile
+│       ├── AddChapterDialog.tsx            # Topic prompt dialog + model picker
+│       ├── StudyChapterModal.tsx           # Modal shell + view router
+│       ├── ChapterView.tsx                 # Chapter table-of-contents view
+│       ├── LessonView.tsx                  # Lesson detail view
+│       ├── ResourceList.tsx                # Shared resource list (chapter + lesson)
+│       ├── StudyEmptyState.tsx             # No-resume / no-plan placeholders
+│       ├── StudyBanners.tsx                # Error / stale / hydrating / overview blocks
+│       └── ModelSelector.tsx               # Reusable Gemini model dropdown
 ├── lib/
-│   ├── store.ts                       # Zustand state
-│   ├── db.ts                          # Supabase CRUD
-│   ├── gemini.ts                      # Gemini clients (flash + flash-lite)
-│   ├── ai-queue/
-│   │   ├── auth.ts                    # Bearer token helpers for extension API routes
-│   │   └── client.ts                  # Supabase service role client
-│   ├── ats-scorer.ts                  # Local ATS scoring engine
-│   └── utils.ts                       # Shared formatters and helpers
+│   ├── store.ts                            # Zustand state
+│   ├── db.ts                               # Supabase CRUD
+│   ├── gemini.ts                           # Gemini clients (flash + flash-lite)
+│   ├── ai-generate.ts                      # generateJsonWithFallback, parseJsonObject, isTransientAIError
+│   ├── study-utils.ts                      # Lesson normalize + difficulty/section/resource constants + model registry
+│   ├── ats-scorer.ts                       # Local ATS scoring engine
+│   ├── autofill-classifier.ts              # Rule-based form-field classification
+│   ├── ai-queue/                           # Bearer auth helpers + service-role client (for extension routes)
+│   ├── supabase/
+│   │   ├── client.ts                       # Browser client
+│   │   ├── server.ts                       # Server-component cookie client
+│   │   └── route-auth.ts                   # NextRequest cookie auth helper for route handlers
+│   └── utils.ts                            # Shared formatters and helpers
+├── sql/                                    # Supabase migrations
+│   ├── create_resume_data.sql
+│   └── create_study_plans.sql
 └── types/
-    └── index.ts                       # Shared TypeScript types
+    ├── index.ts                            # Shared TypeScript types (incl. StudyChapter, StudyLesson)
+    └── autofill.ts                         # Autofill field/answer types
 ```
 
 ## AI Models
@@ -84,4 +110,17 @@ src/
 | Feature | Model |
 |---|---|
 | Resume tailoring + cover letter | `gemini-2.5-flash` |
-| ATS scoring, field extraction, email classification | `gemini-2.5-flash-lite` |
+| ATS scoring, field extraction, email classification, autofill | `gemini-2.5-flash-lite` |
+| Study plan + chapter + lesson | User-selectable per generation (Flash Lite / Flash / Pro) — see `lib/study-utils.ts:STUDY_MODELS` |
+
+`lib/ai-generate.ts:generateJsonWithFallback` retries on 503/429 and falls
+through the model list automatically. The model that actually produced output
+is returned alongside the result and persisted on the lesson row so the UI can
+display "Generated by X".
+
+## Refactor playbook
+
+When extending or cleaning up the codebase, follow
+[`../REFACTORING.md`](../REFACTORING.md). Pages should stay as composition
+only; pure helpers go in `lib/`; feature components go in
+`components/<feature>/`; cross-feature primitives go in `components/ui/`.

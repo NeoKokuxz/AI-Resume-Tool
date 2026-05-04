@@ -89,6 +89,52 @@ export interface UserProfile {
   onboarded: boolean;
 }
 
+export type StudyDifficulty = "beginner" | "intermediate" | "advanced";
+
+export interface StudyResource {
+  title: string;
+  type: "article" | "video" | "course" | "doc" | "book";
+  url?: string;
+}
+
+export interface StudyLessonContent {
+  overview: string;
+  walkthrough: { heading: string; body: string }[];
+  keyTakeaways: string[];
+  examples: { title: string; body: string; code?: string }[];
+  exercises: string[];
+  furtherReading: StudyResource[];
+}
+
+export interface StudyLesson {
+  title: string;
+  content?: StudyLessonContent;
+  generatedAt?: string;
+  // ID of the AI model that produced `content`. Empty until generated.
+  model?: string;
+}
+
+export interface StudyChapter {
+  id: string;
+  title: string;
+  summary: string;
+  skills: string[];
+  difficulty: StudyDifficulty;
+  estimatedHours: number;
+  // Lessons are stored as {title, content?}. Older cached plans may have them
+  // as raw strings; consumers should normalize before render.
+  lessons: (StudyLesson | string)[];
+  resources: StudyResource[];
+  whyImportant?: string;
+}
+
+export interface StudyPlan {
+  prompt: string;
+  generatedAt: string;
+  overview: string;
+  chapters: StudyChapter[];
+}
+
 export interface DashboardStats {
   totalApplications: number;
   interviews: number;

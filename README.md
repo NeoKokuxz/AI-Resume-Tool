@@ -32,6 +32,8 @@ chrome-extension/    # Chrome side panel extension
 - **Email Monitor** — Paste emails to auto-classify them (interview invite, rejection, assessment, recruiter outreach)
 - **Resume Manager** — Upload, paste, or edit your base resume with automatic skill detection
 - **Dashboard** — Stats, pipeline bar chart, recent activity, and quick actions
+- **Interview Prep — Study** — AI-generated study plan tailored to your resume and a goal (e.g. "transition into ML"). Plan is cached per user; chapters group into Beginner / Intermediate / Advanced sections; each lesson generates rich content on demand (overview, walkthrough, examples, exercises, further reading). Pick which Gemini model to use (Flash Lite / Flash / Pro) per generation.
+- **Interview Prep — Mock Interview** *(stub)* — Suggested mock-interview cards (behavioral, system design, technical, recruiter screen). Live AI-led sessions are planned.
 
 ### Tech Stack
 
@@ -72,6 +74,19 @@ GEMINI_API_KEY=AIza...
 npm run dev
 # Open http://localhost:3000
 ```
+
+### Codebase organization
+
+- `src/lib/` — pure helpers and constants (no React). AI generation, Supabase
+  clients, feature utils.
+- `src/components/<feature>/` — feature-specific components (e.g.
+  `components/study/`).
+- `src/components/ui/` — generic UI primitives (`Button`, `Modal`, `StatTile`).
+- `src/app/(app)/<page>/page.tsx` — pages are composition only: state,
+  handlers, and component calls. No inline business logic.
+
+See [`REFACTORING.md`](./REFACTORING.md) for the playbook used to keep this
+structure clean as the app grows.
 
 ### Supabase Setup
 
@@ -145,6 +160,39 @@ create table user_profiles (
 alter table user_profiles enable row level security;
 create policy "Users manage own profile" on user_profiles for all using (auth.uid() = id);
 
+-- Resume data (rich extracted profile used by autofill + study plan)
+create table resume_data (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references user_profiles(id) on delete cascade,
+  full_name text default '', email text default '', phone text default '',
+  linkedin text default '', github text default '', website text default '',
+  location text default '', city text default '', state text default '', country text default '',
+  work_title text default '', years_experience int default 0, summary text default '',
+  skills jsonb default '[]'::jsonb, tools jsonb default '[]'::jsonb,
+  languages jsonb default '[]'::jsonb, certifications jsonb default '[]'::jsonb,
+  education jsonb default '[]'::jsonb, experience jsonb default '[]'::jsonb,
+  work_authorization text default '',
+  updated_at timestamptz default now(),
+  unique(user_id)
+);
+alter table resume_data enable row level security;
+create policy "Users manage own resume_data" on resume_data for all using (auth.uid() = user_id);
+
+-- Study plans (AI-generated, one row per user; lessons cached inside chapters jsonb)
+create table study_plans (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references user_profiles(id) on delete cascade,
+  prompt text not null default '',
+  overview text default '',
+  chapters jsonb not null default '[]'::jsonb,
+  resume_id uuid,
+  generated_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(user_id)
+);
+alter table study_plans enable row level security;
+create policy "Users manage own study_plan" on study_plans for all using (auth.uid() = user_id);
+
 -- Auto-create profile on signup
 create or replace function handle_new_user()
 returns trigger as $$
@@ -170,12 +218,21 @@ create trigger on_auth_user_created
 | `POST /api/generate-pdf` | PDF generation from resume text |
 | `POST /api/parse-pdf` | PDF text extraction |
 | `POST /api/classify-email` | AI email classification |
+| `POST /api/autofill` | Field-by-field autofill answers for a job application form |
+| `POST /api/resume-data/extract` | Extract rich structured profile from resume text and upsert |
+| `GET /api/resume-data` | Read user's structured resume data |
 | `GET /api/profile` | Authenticated user profile |
 | `GET /api/resume` | Authenticated user's base resume |
 | `POST /api/jobs/import` | Save job + create application (used by Chrome extension) |
 | `PATCH /api/applications/update` | Update application status |
+| `GET /api/study-plan` | Read cached plan + staleness flag (resume changed since cache) |
+| `POST /api/study-plan` | Generate a new plan; upserts to `study_plans` |
+| `POST /api/study-plan/chapter` | Append a single new chapter (topic-specific or AI-picked) to the cached plan |
+| `POST /api/study-plan/lesson` | Generate detailed lesson content; persists into the chapter's `lessons[]` |
 
-All extension-facing routes require `Authorization: Bearer <supabase_access_token>`.
+Extension-facing routes require `Authorization: Bearer <supabase_access_token>`.
+Web-app-only routes (`/api/study-plan/*`, `/api/resume-data/extract`) use the
+session cookie via `lib/supabase/route-auth.ts`.
 
 ---
 
@@ -227,12 +284,19 @@ const SUPABASE_ANON_KEY = "sb_publishable_...";
 
 ## AI Features
 
-| Feature | Model | Notes |
+| Feature | Default model | Notes |
 |---|---|---|
 | Resume field extraction (onboarding) | Gemini 2.5 Flash Lite | JSON output |
 | Job ATS scoring | Gemini 2.5 Flash Lite | Returns score, summary, keywords |
 | Resume tailoring + cover letter | Gemini 2.5 Flash | Full document rewrite, no truncation |
 | Email classification | Gemini 2.5 Flash Lite | Falls back to rule-based |
+| Autofill answers | Gemini 2.5 Flash Lite | Per-field, mixes rule-based and AI |
+| Study plan generation | User-selectable: Flash Lite / Flash / Pro | Plan cached in `study_plans`, refresh shows stale banner if resume changed |
+| Study chapter (topic add) | User-selectable | Appends to existing plan, avoids overlap with current chapters |
+| Study lesson detail | User-selectable | Cached per lesson; first click generates, subsequent clicks are instant |
+
+All study endpoints share `lib/ai-generate.ts` for retries + automatic fallback
+across the 3 model tiers when Gemini returns 503/429.
 
 ### Resume Tailoring — What the AI does
 

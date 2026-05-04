@@ -46,6 +46,13 @@ export default function ResumePage() {
     setBaseResume(resume);
     saveResume(resume);
     updateUserProfile({ skills: resume.skills });
+
+    // Populate resume_data table for autofill (fire and forget)
+    fetch("/api/resume-data/extract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resumeText: content }),
+    }).catch(() => {});
   }
 
   function handlePasteMode() {
@@ -66,6 +73,13 @@ export default function ResumePage() {
     saveResume(resume);
     updateUserProfile({ skills: resume.skills });
     setIsEditing(false);
+
+    // Populate resume_data table for autofill (fire and forget)
+    fetch("/api/resume-data/extract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resumeText: editContent }),
+    }).catch(() => {});
   }
 
   if (isEditing) {
