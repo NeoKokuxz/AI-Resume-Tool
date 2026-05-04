@@ -33,7 +33,7 @@ GEMINI_API_KEY=AIza...
 ```
 src/
 ├── app/
-│   ├── (app)/                              # Authenticated route group
+│   ├── (authed)/                           # Authenticated route group
 │   │   ├── layout.tsx                      # Auth shell + hydration + onboarding redirect
 │   │   ├── dashboard/page.tsx              # Stats, pipeline, recent activity
 │   │   ├── resume/page.tsx                 # Resume manager

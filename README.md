@@ -14,13 +14,13 @@ An AI-powered job application system — a Next.js web app paired with a Chrome 
 ## Monorepo Structure
 
 ```
-resume-app/          # Next.js web application
+web/          # Next.js web application
 chrome-extension/    # Chrome side panel extension
 ```
 
 ---
 
-## Web App (`resume-app/`)
+## Web App (`web/`)
 
 ### Features
 
@@ -56,7 +56,7 @@ chrome-extension/    # Chrome side panel extension
 **Prerequisites:** Node.js 20.9+, a Supabase project, a Google Gemini API key
 
 ```bash
-cd resume-app
+cd web
 npm install
 cp .env.local.example .env.local
 ```
@@ -82,7 +82,7 @@ npm run dev
 - `src/components/<feature>/` — feature-specific components (e.g.
   `components/study/`).
 - `src/components/ui/` — generic UI primitives (`Button`, `Modal`, `StatTile`).
-- `src/app/(app)/<page>/page.tsx` — pages are composition only: state,
+- `src/app/(authed)/<page>/page.tsx` — pages are composition only: state,
   handlers, and component calls. No inline business logic.
 
 See [`REFACTORING.md`](./REFACTORING.md) for the playbook used to keep this

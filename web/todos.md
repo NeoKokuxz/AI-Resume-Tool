@@ -35,7 +35,7 @@ The resume page shows plain text content. There is no way to download the base r
 - [ ] Add "Download PDF" button on the resume page using `/api/generate-pdf`
 
 ### Jobs Page — TypeScript Error
-`src/app/(app)/jobs/page.tsx` line 199: passing object without `id` and `addedAt` fields where a full `Job` type is required.
+`src/app/(authed)/jobs/page.tsx` line 199: passing object without `id` and `addedAt` fields where a full `Job` type is required.
 - [ ] Fix the type error (add `id` and `addedAt` to the object or use `Omit<Job, ...>`)
 
 ### `generate-pdf` Route — TypeScript Error

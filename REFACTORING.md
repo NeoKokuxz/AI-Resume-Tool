@@ -19,7 +19,7 @@ Every piece of code lives in exactly one of these:
 | `src/components/<feature>/` | Feature-specific UI components. | `components/study/ChapterSections.tsx` |
 | `src/components/ui/` | Generic UI primitives reusable across features. | `Modal`, `Button`, `StatTile` |
 
-`src/app/(app)/<page>/page.tsx` should be **composition only** — state, effects,
+`src/app/(authed)/<page>/page.tsx` should be **composition only** — state, effects,
 handlers, and `<Component />` calls. No inline business logic, no inline
 constants, no large JSX implementations.
 
@@ -46,7 +46,7 @@ Run these in order. Verify with `npx tsc --noEmit` after each step.
 
 ```bash
 # Find the bloated files
-wc -l src/app/(app)/*/page.tsx src/components/**/*.tsx | sort -n | tail -20
+wc -l src/app/(authed)/*/page.tsx src/components/**/*.tsx | sort -n | tail -20
 
 # Find duplicated function definitions
 grep -rn "function generateJsonWithFallback" src/
@@ -212,7 +212,7 @@ of the diff:
 
 | File | Before | After |
 |---|---|---|
-| `app/(app)/study/page.tsx` | 448 | 209 |
+| `app/(authed)/study/page.tsx` | 448 | 209 |
 | `components/study/StudyChapterModal.tsx` | 636 | 215 |
 | 3 × `app/api/study-plan/*/route.ts` | ~770 total | ~620 total |
 | New `lib/ai-generate.ts` | — | 67 |
