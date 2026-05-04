@@ -4,25 +4,43 @@ import { useState, useRef, useEffect } from "react";
 import { Sparkles, Loader2, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ModelSelector } from "@/components/study/ModelSelector";
-import { DEFAULT_STUDY_MODEL } from "@/lib/study-utils";
+import { TopicChipRow } from "@/components/study/TopicChipRow";
+import {
+  DEFAULT_STUDY_MODEL,
+  PLAN_PROMPT_SUGGESTIONS,
+  type StudyTopicPreset,
+} from "@/lib/study-utils";
 
 interface StudyPlanGeneratorProps {
-  onGenerate: (prompt: string, model: string) => Promise<void>;
+  onGenerate: (prompt: string, model: string, tags: string[]) => Promise<void>;
   loading: boolean;
   hasPlan: boolean;
+  /** Topic chips to show — fixed core tags + AI suggestions from the user's resume */
+  topics?: StudyTopicPreset[];
+  /** True while the topic suggestions endpoint is loading */
+  topicsLoading?: boolean;
 }
 
-const SUGGESTIONS = [
-  "Help me transition into AI/ML engineering",
-  "Get me ready for senior backend interviews",
-  "Build skills for a staff engineer role",
-  "Strengthen my system design fundamentals",
-];
-
-export function StudyPlanGenerator({ onGenerate, loading, hasPlan }: StudyPlanGeneratorProps) {
+export function StudyPlanGenerator({
+  onGenerate,
+  loading,
+  hasPlan,
+  topics = [],
+  topicsLoading = false,
+}: StudyPlanGeneratorProps) {
   const [value, setValue] = useState("");
   const [model, setModel] = useState(DEFAULT_STUDY_MODEL);
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  function toggleTag(id: string) {
+    setSelectedTags((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   // Auto-resize the textarea
   useEffect(() => {
@@ -33,11 +51,15 @@ export function StudyPlanGenerator({ onGenerate, loading, hasPlan }: StudyPlanGe
   }, [value]);
 
   const trimmed = value.trim();
-  const disabled = !trimmed || loading;
+  // User can submit if they wrote a prompt OR picked at least one tag
+  const disabled = (!trimmed && selectedTags.size === 0) || loading;
 
   async function submit() {
     if (disabled) return;
-    await onGenerate(trimmed, model);
+    const tagLabels = topics
+      .filter((t) => selectedTags.has(t.id))
+      .map((t) => t.label);
+    await onGenerate(trimmed, model, tagLabels);
   }
 
   return (
@@ -67,6 +89,15 @@ export function StudyPlanGenerator({ onGenerate, loading, hasPlan }: StudyPlanGe
             disabled={loading}
           />
         </div>
+
+        <TopicChipRow
+          topics={topics}
+          selected={selectedTags}
+          onToggle={toggleTag}
+          onClear={() => setSelectedTags(new Set())}
+          loading={loading}
+          topicsLoading={topicsLoading}
+        />
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-gray-800/80 pt-3">
           <div className="flex items-center gap-3 text-[11px] text-gray-500">
@@ -102,7 +133,7 @@ export function StudyPlanGenerator({ onGenerate, loading, hasPlan }: StudyPlanGe
       {!hasPlan && !loading && (
         <div className="mt-3 flex flex-wrap gap-2">
           <span className="text-[11px] uppercase tracking-wider text-gray-600">Try:</span>
-          {SUGGESTIONS.map((s) => (
+          {PLAN_PROMPT_SUGGESTIONS.map((s) => (
             <button
               key={s}
               onClick={() => setValue(s)}

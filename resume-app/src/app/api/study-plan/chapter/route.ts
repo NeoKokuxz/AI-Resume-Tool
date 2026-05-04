@@ -24,6 +24,10 @@ export async function POST(request: NextRequest) {
       topic?: string;
       model?: string;
     };
+    const cleanTopic = (topic || "").trim();
+    if (!cleanTopic) {
+      return NextResponse.json({ error: "topic is required" }, { status: 400 });
+    }
     const preferredModel = isValidStudyModel(requestedModel) ? requestedModel : DEFAULT_STUDY_MODEL;
 
     const supabase = createServiceRoleClient();
@@ -81,7 +85,7 @@ EXISTING CHAPTERS (do NOT duplicate these):
 ${existingTitles || "(no chapters yet)"}
 
 WHAT THE USER WANTS THIS NEW CHAPTER TO COVER:
-${topic?.trim() || "(no specific topic — pick a meaningful gap that fits the candidate's overall goal and complements the existing chapters)"}
+${cleanTopic}
 
 Build ONE new chapter. It must complement the existing chapters and not repeat their content.
 

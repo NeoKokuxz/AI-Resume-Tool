@@ -67,12 +67,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { prompt, model: requestedModel } = await request.json() as {
+    const { prompt, model: requestedModel, tags } = await request.json() as {
       prompt?: string;
       model?: string;
+      tags?: string[];
     };
-    if (!prompt || !prompt.trim()) {
-      return NextResponse.json({ error: "prompt required" }, { status: 400 });
+    const cleanPrompt = (prompt || "").trim();
+    const cleanTags = Array.isArray(tags)
+      ? tags.map((t) => (typeof t === "string" ? t.trim() : "")).filter(Boolean).slice(0, 12)
+      : [];
+    // User must give us either a freeform prompt or at least one topic chip.
+    if (!cleanPrompt && cleanTags.length === 0) {
+      return NextResponse.json({ error: "prompt or tags required" }, { status: 400 });
     }
     const preferredModel = isValidStudyModel(requestedModel) ? requestedModel : DEFAULT_STUDY_MODEL;
 
@@ -120,6 +126,19 @@ export async function POST(request: NextRequest) {
       .filter(Boolean)
       .join("; ");
 
+    const requiredChaptersBlock = cleanTags.length
+      ? `REQUIRED CHAPTERS (each must be its own chapter, in this order):
+${cleanTags.map((t, i) => `${i + 1}. ${t}`).join("\n")}
+
+After the required chapters, add 1-2 additional chapters that complement them
+based on the candidate's goal and resume gaps. Total chapters: ${cleanTags.length} required
++ 1-2 supplemental.`
+      : "Build 4-6 chapters total, ordered from foundational to advanced.";
+
+    const goalBlock = cleanPrompt
+      ? `CANDIDATE'S GOAL / REQUEST:\n${cleanPrompt}`
+      : `CANDIDATE'S GOAL / REQUEST:\n(No freeform goal — base the plan on the required chapters above and the candidate's resume gaps.)`;
+
     const aiPrompt = `You are a senior career coach building a personalized study plan.
 
 CANDIDATE PROFILE:
@@ -132,10 +151,9 @@ Tools: ${tools.join(", ") || "none provided"}
 Certifications: ${certifications.join(", ") || "none"}
 Recent experience: ${experienceLine || "none provided"}
 
-CANDIDATE'S GOAL / REQUEST:
-${prompt.trim()}
+${goalBlock}
 
-Build a focused study plan that fills the gap between their current skills and the goal.
+${requiredChaptersBlock}
 
 Return a JSON object with this exact shape:
 {
@@ -158,7 +176,6 @@ Return a JSON object with this exact shape:
 }
 
 Rules:
-- 4-6 chapters total, ordered from foundational to advanced.
 - Skip skills the candidate already has UNLESS the goal explicitly requires deepening them.
 - "lessons": 4-7 specific, actionable subtopics per chapter (not vague).
 - "skills": 2-5 skills the chapter teaches.
@@ -204,13 +221,20 @@ Rules:
     }));
 
     const generatedAt = new Date().toISOString();
-    const cleanPrompt = prompt.trim();
+    // Build a human-readable prompt for the cache row that includes both
+    // freeform text and any tags used.
+    const persistedPrompt = [
+      cleanPrompt,
+      cleanTags.length ? `Tags: ${cleanTags.join(", ")}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
 
     // Cache plan (one row per user, replaced on regen)
     const { error: cacheError } = await supabase.from("study_plans").upsert(
       {
         user_id: user.id,
-        prompt: cleanPrompt,
+        prompt: persistedPrompt,
         overview: parsed.overview || "",
         chapters,
         resume_id: resume?.id ?? null,
@@ -227,7 +251,7 @@ Rules:
       overview: parsed.overview || "",
       chapters,
       generatedAt,
-      prompt: cleanPrompt,
+      prompt: persistedPrompt,
       model: usedModel,
       saved: !cacheError,
       saveError: cacheError ? cacheError.message : null,

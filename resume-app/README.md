@@ -58,9 +58,10 @@ src/
 │       ├── jobs/import/                    # Save job + create application (Chrome ext)
 │       ├── applications/update/            # Update application status (Chrome ext)
 │       └── study-plan/                     # Study plan endpoints
-│           ├── route.ts                    # GET cached plan / POST generate plan
-│           ├── chapter/route.ts            # POST append a single chapter
-│           └── lesson/route.ts             # POST generate detailed lesson content
+│           ├── route.ts                    # GET cached plan / POST generate plan (accepts tags)
+│           ├── chapter/route.ts            # POST append a single chapter (topic required)
+│           ├── lesson/route.ts             # POST generate detailed lesson content
+│           └── topics/route.ts             # GET fixed + AI-suggested topic chips
 ├── components/
 │   ├── ui/                                 # Generic primitives — Button, Badge, Modal, ATSScoreRing, StatTile
 │   ├── layout/Sidebar.tsx                  # Nav with expandable groups (Interview Prep)
@@ -72,6 +73,7 @@ src/
 │   └── study/                              # Study feature — composable pieces
 │       ├── StudyHeader.tsx                 # Top status bar (avatar, skills, chat toggle)
 │       ├── StudyPlanGenerator.tsx          # Prompt textarea + model picker + Generate
+│       ├── TopicChipRow.tsx                # Toggleable topic chips (selected = required chapter)
 │       ├── ChapterSections.tsx             # Cards grouped + collapsible by difficulty
 │       ├── StudyChapterCard.tsx            # Single chapter card
 │       ├── AddChapterCard.tsx              # "+ Add a topic" tile
@@ -82,13 +84,13 @@ src/
 │       ├── ResourceList.tsx                # Shared resource list (chapter + lesson)
 │       ├── StudyEmptyState.tsx             # No-resume / no-plan placeholders
 │       ├── StudyBanners.tsx                # Error / stale / hydrating / overview blocks
-│       └── ModelSelector.tsx               # Reusable Gemini model dropdown
+│       └── ModelSelector.tsx               # Reusable Gemini model dropdown (up/down direction)
 ├── lib/
 │   ├── store.ts                            # Zustand state
 │   ├── db.ts                               # Supabase CRUD
 │   ├── gemini.ts                           # Gemini clients (flash + flash-lite)
 │   ├── ai-generate.ts                      # generateJsonWithFallback, parseJsonObject, isTransientAIError
-│   ├── study-utils.ts                      # Lesson normalize + difficulty/section/resource constants + model registry
+│   ├── study-utils.ts                      # Lesson normalize + difficulty/section/resource constants + model registry + topic presets
 │   ├── ats-scorer.ts                       # Local ATS scoring engine
 │   ├── autofill-classifier.ts              # Rule-based form-field classification
 │   ├── ai-queue/                           # Bearer auth helpers + service-role client (for extension routes)

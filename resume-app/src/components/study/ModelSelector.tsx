@@ -11,8 +11,14 @@ interface ModelSelectorProps {
   disabled?: boolean;
   /** "sm" for inline buttons, "md" for the plan generator footer */
   size?: "sm" | "md";
-  /** Optional label override; defaults to the selected model's name */
+  /** Where the menu aligns horizontally relative to the button */
   align?: "left" | "right";
+  /**
+   * Open the menu upward instead of downward. Use this when the selector
+   * sits inside a footer or near the bottom of an `overflow-hidden` parent
+   * where a downward menu would be clipped.
+   */
+  direction?: "up" | "down";
 }
 
 export function ModelSelector({
@@ -21,6 +27,7 @@ export function ModelSelector({
   disabled = false,
   size = "sm",
   align = "right",
+  direction = "down",
 }: ModelSelectorProps) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -76,7 +83,8 @@ export function ModelSelector({
         <div
           role="listbox"
           className={cn(
-            "absolute z-30 mt-1 w-64 overflow-hidden rounded-lg border border-gray-700 bg-gray-900 shadow-lg",
+            "absolute z-30 w-64 overflow-hidden rounded-lg border border-gray-700 bg-gray-900 shadow-lg",
+            direction === "up" ? "bottom-full mb-1" : "top-full mt-1",
             align === "right" ? "right-0" : "left-0"
           )}
         >

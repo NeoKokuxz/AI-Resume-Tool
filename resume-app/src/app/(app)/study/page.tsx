@@ -15,6 +15,7 @@ import {
   StudyHydratingSpinner,
   StudyOverview,
 } from "@/components/study/StudyBanners";
+import { getStudyTopicPresets, type StudyTopicPreset } from "@/lib/study-utils";
 import type { StudyChapter, StudyPlan } from "@/types";
 
 interface PlanResponse {
@@ -43,8 +44,13 @@ export default function StudyPage() {
   // Chat starts hidden. Once hydration finishes (effect below) we open it
   // when there's no plan to nudge the user to generate one.
   const [chatVisible, setChatVisible] = useState(false);
+  // Topic chips shown in the generator. Seeded with rule-based suggestions
+  // for instant render, then upgraded with AI-generated tags from the resume.
+  const [topics, setTopics] = useState<StudyTopicPreset[]>(getStudyTopicPresets());
+  const [topicsLoading, setTopicsLoading] = useState(false);
 
-  // Fetch user profile for the header
+  // Fetch user profile for the header. As soon as we have skills, seed the
+  // topic chip list with rule-based matches so the row renders immediately.
   useEffect(() => {
     fetchUserProfile().then((p) => {
       if (!p) return;
@@ -53,7 +59,32 @@ export default function StudyPage() {
         workTitle: p.workTitle || "",
         skills: p.skills || [],
       });
+      setTopics(getStudyTopicPresets(p.skills || []));
     });
+  }, []);
+
+  // Upgrade topic chips with AI-suggested tags based on the full resume.
+  // Only replace the rule-based seed if the AI response actually adds value
+  // (i.e. returns more topics than the 3 fixed defaults).
+  useEffect(() => {
+    let cancelled = false;
+    setTopicsLoading(true);
+    fetch("/api/study-plan/topics")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.topics?.length) return;
+        const aiTopics = data.topics as StudyTopicPreset[];
+        // If AI returned only the 3 fixed (or fewer), keep whatever the
+        // client already had — the rule-based seed is at least as good.
+        setTopics((prev) => (aiTopics.length > prev.length ? aiTopics : prev));
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setTopicsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Hydrate cached plan on mount; default chat-open state once we know
@@ -87,14 +118,14 @@ export default function StudyPage() {
     };
   }, []);
 
-  async function generate(prompt: string, model: string) {
+  async function generate(prompt: string, model: string, tags: string[]) {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/study-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, model }),
+        body: JSON.stringify({ prompt, model, tags }),
       });
 
       let data: PlanResponse | null = null;
@@ -146,6 +177,8 @@ export default function StudyPage() {
           onGenerate={generate}
           loading={loading}
           hasPlan={!!plan}
+          topics={topics}
+          topicsLoading={topicsLoading}
         />
       )}
 

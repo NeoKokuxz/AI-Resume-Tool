@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { X, Sparkles, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ModelSelector } from "@/components/study/ModelSelector";
-import { DEFAULT_STUDY_MODEL } from "@/lib/study-utils";
+import { CHAPTER_TOPIC_SUGGESTIONS, DEFAULT_STUDY_MODEL } from "@/lib/study-utils";
 import type { StudyChapter } from "@/types";
 
 interface AddChapterDialogProps {
@@ -12,13 +12,6 @@ interface AddChapterDialogProps {
   onClose: () => void;
   onAdded: (chapter: StudyChapter) => void;
 }
-
-const TOPIC_SUGGESTIONS = [
-  "Distributed system tracing",
-  "Database indexing deep-dive",
-  "Authentication & authorization patterns",
-  "Cost optimization on AWS",
-];
 
 export function AddChapterDialog({ open, onClose, onAdded }: AddChapterDialogProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -33,7 +26,7 @@ export function AddChapterDialog({ open, onClose, onAdded }: AddChapterDialogPro
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 320)}px`;
   }, [topic]);
 
   // Lock scroll, ESC to close, autofocus when opened
@@ -62,15 +55,18 @@ export function AddChapterDialog({ open, onClose, onAdded }: AddChapterDialogPro
 
   if (!open) return null;
 
+  const trimmedTopic = topic.trim();
+  const canSubmit = trimmedTopic.length > 0 && !loading;
+
   async function submit() {
-    if (loading) return;
+    if (!canSubmit) return;
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/study-plan/chapter", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: topic.trim() || undefined, model }),
+        body: JSON.stringify({ topic: trimmedTopic, model }),
       });
 
       let data: { chapter?: StudyChapter; error?: string } | null = null;
@@ -102,38 +98,39 @@ export function AddChapterDialog({ open, onClose, onAdded }: AddChapterDialogPro
     >
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
-      <div className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-gray-700 bg-gray-900 shadow-2xl animate-slide-up">
+      <div className="relative flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-gray-700 bg-gray-900 shadow-2xl animate-slide-up">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-gray-800 px-6 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-gray-800 px-7 py-5">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <Sparkles size={13} className="text-indigo-400" />
+              <Sparkles size={14} className="text-indigo-400" />
               <span className="text-[10px] font-semibold uppercase tracking-widest text-indigo-400">
                 Add Topic
               </span>
             </div>
-            <h2 className="mt-1 text-base font-semibold text-gray-50">
+            <h2 className="mt-1.5 text-lg font-semibold text-gray-50">
               Generate a new chapter
             </h2>
-            <p className="mt-0.5 text-xs text-gray-500">
-              We&apos;ll keep it consistent with the rest of your plan and skip topics you&apos;ve already covered.
+            <p className="mt-1 text-sm text-gray-500">
+              Describe what you want to learn. We&apos;ll keep it consistent with the rest of
+              your plan and skip topics you&apos;ve already covered.
             </p>
           </div>
           <button
             onClick={onClose}
             disabled={loading}
-            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Close"
           >
-            <X size={14} />
+            <X size={16} />
           </button>
         </div>
 
         {/* Body */}
-        <div className="space-y-3 px-6 py-5">
+        <div className="flex-1 space-y-4 overflow-y-auto px-7 py-6">
           <div>
             <label className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">
-              Topic <span className="text-gray-600">(optional)</span>
+              Topic <span className="text-red-400">*</span>
             </label>
             <textarea
               ref={inputRef}
@@ -145,18 +142,23 @@ export function AddChapterDialog({ open, onClose, onAdded }: AddChapterDialogPro
                   submit();
                 }
               }}
-              placeholder="e.g. 'Distributed tracing with OpenTelemetry'. Leave blank to let AI pick a meaningful gap."
-              rows={1}
+              placeholder="e.g. 'Distributed tracing with OpenTelemetry — focus on instrumenting a Node.js API and reading traces in Jaeger.'"
+              rows={5}
+              required
               disabled={loading}
-              className="mt-1.5 w-full resize-none rounded-lg border border-gray-700 bg-gray-800/60 px-3 py-2 text-sm text-gray-100 placeholder:text-gray-500 outline-none transition-colors focus:border-indigo-700/60 focus:bg-gray-900 disabled:opacity-50"
+              className="mt-2 w-full resize-none rounded-xl border border-gray-700 bg-gray-800/60 px-4 py-3 text-base leading-relaxed text-gray-100 placeholder:text-gray-500 outline-none transition-colors focus:border-indigo-600/70 focus:bg-gray-900 focus:ring-2 focus:ring-indigo-600/20 disabled:opacity-50"
             />
+            <p className="mt-1.5 text-[11px] text-gray-600">
+              Be specific — mention tools, depth, and what success looks like. The more
+              detail, the more focused the chapter will be.
+            </p>
           </div>
 
           {/* Suggestions */}
           {!topic && !loading && (
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-[10px] uppercase tracking-wider text-gray-600">Try:</span>
-              {TOPIC_SUGGESTIONS.map((s) => (
+              {CHAPTER_TOPIC_SUGGESTIONS.map((s) => (
                 <button
                   key={s}
                   type="button"
@@ -181,7 +183,13 @@ export function AddChapterDialog({ open, onClose, onAdded }: AddChapterDialogPro
 
         {/* Footer */}
         <div className="flex items-center justify-between gap-3 border-t border-gray-800 px-6 py-3">
-          <ModelSelector value={model} onChange={setModel} disabled={loading} align="left" />
+          <ModelSelector
+            value={model}
+            onChange={setModel}
+            disabled={loading}
+            align="left"
+            direction="up"
+          />
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
@@ -192,10 +200,10 @@ export function AddChapterDialog({ open, onClose, onAdded }: AddChapterDialogPro
             </button>
             <button
               onClick={submit}
-              disabled={loading}
+              disabled={!canSubmit}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors",
-                loading
+                !canSubmit
                   ? "cursor-not-allowed bg-gray-800 text-gray-500"
                   : "bg-indigo-600 text-white hover:bg-indigo-500"
               )}

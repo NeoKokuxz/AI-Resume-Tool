@@ -32,7 +32,7 @@ chrome-extension/    # Chrome side panel extension
 - **Email Monitor** — Paste emails to auto-classify them (interview invite, rejection, assessment, recruiter outreach)
 - **Resume Manager** — Upload, paste, or edit your base resume with automatic skill detection
 - **Dashboard** — Stats, pipeline bar chart, recent activity, and quick actions
-- **Interview Prep — Study** — AI-generated study plan tailored to your resume and a goal (e.g. "transition into ML"). Plan is cached per user; chapters group into Beginner / Intermediate / Advanced sections; each lesson generates rich content on demand (overview, walkthrough, examples, exercises, further reading). Pick which Gemini model to use (Flash Lite / Flash / Pro) per generation.
+- **Interview Prep — Study** — AI-generated study plan tailored to your resume and a goal (e.g. "transition into ML"). Plan is cached per user; chapters group into Beginner / Intermediate / Advanced sections; each lesson generates rich content on demand (overview, walkthrough, examples, exercises, further reading). Topic chips (3 fixed cores + AI-suggested from your resume) can be toggled to force them into the plan as required chapters. Pick which Gemini model to use (Flash Lite / Flash / Pro) per generation; default is Flash.
 - **Interview Prep — Mock Interview** *(stub)* — Suggested mock-interview cards (behavioral, system design, technical, recruiter screen). Live AI-led sessions are planned.
 
 ### Tech Stack
@@ -226,9 +226,10 @@ create trigger on_auth_user_created
 | `POST /api/jobs/import` | Save job + create application (used by Chrome extension) |
 | `PATCH /api/applications/update` | Update application status |
 | `GET /api/study-plan` | Read cached plan + staleness flag (resume changed since cache) |
-| `POST /api/study-plan` | Generate a new plan; upserts to `study_plans` |
-| `POST /api/study-plan/chapter` | Append a single new chapter (topic-specific or AI-picked) to the cached plan |
+| `POST /api/study-plan` | Generate a new plan; accepts `prompt` + `tags[]` (tags become required chapters); upserts to `study_plans` |
+| `POST /api/study-plan/chapter` | Append a single new chapter (topic required) to the cached plan |
 | `POST /api/study-plan/lesson` | Generate detailed lesson content; persists into the chapter's `lessons[]` |
+| `GET /api/study-plan/topics` | Topic chip suggestions — 3 fixed cores + AI-inferred from the user's resume (Flash Lite) |
 
 Extension-facing routes require `Authorization: Bearer <supabase_access_token>`.
 Web-app-only routes (`/api/study-plan/*`, `/api/resume-data/extract`) use the
@@ -291,9 +292,10 @@ const SUPABASE_ANON_KEY = "sb_publishable_...";
 | Resume tailoring + cover letter | Gemini 2.5 Flash | Full document rewrite, no truncation |
 | Email classification | Gemini 2.5 Flash Lite | Falls back to rule-based |
 | Autofill answers | Gemini 2.5 Flash Lite | Per-field, mixes rule-based and AI |
-| Study plan generation | User-selectable: Flash Lite / Flash / Pro | Plan cached in `study_plans`, refresh shows stale banner if resume changed |
-| Study chapter (topic add) | User-selectable | Appends to existing plan, avoids overlap with current chapters |
-| Study lesson detail | User-selectable | Cached per lesson; first click generates, subsequent clicks are instant |
+| Study plan generation | User-selectable; default Flash | Accepts prompt + tags (tags = required chapters). Cached in `study_plans`; stale banner when resume changes |
+| Study topic suggestions | Flash Lite | Chip list — 3 fixed cores + ~5 inferred from resume; fail-soft to fixed only |
+| Study chapter (topic add) | User-selectable; default Flash | Appends to existing plan, avoids overlap with current chapters |
+| Study lesson detail | User-selectable; default Flash | Cached per lesson; first click generates, subsequent clicks are instant |
 
 All study endpoints share `lib/ai-generate.ts` for retries + automatic fallback
 across the 3 model tiers when Gemini returns 503/429.

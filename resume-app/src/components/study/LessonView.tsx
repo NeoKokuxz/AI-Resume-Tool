@@ -218,6 +218,7 @@ export function LessonView({
               onChange={onModelChange}
               disabled={loading}
               align="left"
+              direction="up"
             />
             <button
               onClick={onRegenerate}
