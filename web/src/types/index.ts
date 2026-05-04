@@ -143,17 +143,17 @@ export interface DashboardStats {
   atsPassRate: number;
 }
 
+// The kanban + study consume `getStatusColor()` from lib/utils.ts for badge
+// styling, not these constants — they only need `value` and `label`.
 export const APPLICATION_STATUSES: {
   value: ApplicationStatus;
   label: string;
-  color: string;
-  bg: string;
 }[] = [
-  { value: "saved", label: "Saved", color: "text-gray-400", bg: "bg-gray-800" },
-  { value: "applied", label: "Applied", color: "text-blue-400", bg: "bg-blue-950" },
-  { value: "ats_passed", label: "ATS Passed", color: "text-purple-400", bg: "bg-purple-950" },
-  { value: "recruiter_contact", label: "Recruiter", color: "text-yellow-400", bg: "bg-yellow-950" },
-  { value: "interview", label: "Interview", color: "text-orange-400", bg: "bg-orange-950" },
-  { value: "offer", label: "Offer", color: "text-green-400", bg: "bg-green-950" },
-  { value: "rejected", label: "Rejected", color: "text-red-400", bg: "bg-red-950" },
+  { value: "saved", label: "Saved" },
+  { value: "applied", label: "Applied" },
+  { value: "ats_passed", label: "ATS Passed" },
+  { value: "recruiter_contact", label: "Recruiter" },
+  { value: "interview", label: "Interview" },
+  { value: "offer", label: "Offer" },
+  { value: "rejected", label: "Rejected" },
 ];

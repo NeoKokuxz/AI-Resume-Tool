@@ -34,17 +34,44 @@ export function formatRelativeTime(dateString: string): string {
   return formatDate(dateString);
 }
 
+// Single source of truth for badge tints. Saturated low-alpha bg + a slightly
+// stronger border alpha means badges pop on the dark surface and the border
+// never falls back to currentColor (which would render near-white on this
+// theme). The class strings must be literal so Tailwind's JIT can detect
+// them — that's why this is an explicit map and not a string-built helper.
+export type BadgeTint =
+  | "gray"
+  | "blue"
+  | "purple"
+  | "yellow"
+  | "orange"
+  | "green"
+  | "emerald"
+  | "red";
+
+export const BADGE_TINTS: Record<BadgeTint, string> = {
+  gray: "text-gray-300 bg-gray-500/15 border-gray-500/40",
+  blue: "text-blue-300 bg-blue-500/15 border-blue-500/40",
+  purple: "text-purple-300 bg-purple-500/15 border-purple-500/40",
+  yellow: "text-yellow-300 bg-yellow-500/15 border-yellow-500/40",
+  orange: "text-orange-300 bg-orange-500/15 border-orange-500/40",
+  green: "text-green-300 bg-green-500/15 border-green-500/40",
+  emerald: "text-emerald-300 bg-emerald-500/15 border-emerald-500/40",
+  red: "text-red-300 bg-red-500/15 border-red-500/40",
+};
+
+const STATUS_TINTS: Record<ApplicationStatus, BadgeTint> = {
+  saved: "gray",
+  applied: "blue",
+  ats_passed: "purple",
+  recruiter_contact: "yellow",
+  interview: "orange",
+  offer: "emerald",
+  rejected: "red",
+};
+
 export function getStatusColor(status: ApplicationStatus): string {
-  const colors: Record<ApplicationStatus, string> = {
-    saved: "text-gray-400 bg-gray-800 border-gray-700",
-    applied: "text-blue-400 bg-blue-950 border-blue-800",
-    ats_passed: "text-purple-400 bg-purple-950 border-purple-800",
-    recruiter_contact: "text-yellow-400 bg-yellow-950 border-yellow-800",
-    interview: "text-orange-400 bg-orange-950 border-orange-800",
-    offer: "text-green-400 bg-green-950 border-green-800",
-    rejected: "text-red-400 bg-red-950 border-red-800",
-  };
-  return colors[status];
+  return BADGE_TINTS[STATUS_TINTS[status]];
 }
 
 export function getStatusLabel(status: ApplicationStatus): string {
@@ -60,15 +87,16 @@ export function getStatusLabel(status: ApplicationStatus): string {
   return labels[status];
 }
 
+const CLASSIFICATION_TINTS: Record<EmailClassification, BadgeTint> = {
+  interview: "emerald",
+  assessment: "blue",
+  rejection: "red",
+  recruiter_outreach: "yellow",
+  unknown: "gray",
+};
+
 export function getClassificationColor(classification: EmailClassification): string {
-  const colors: Record<EmailClassification, string> = {
-    interview: "text-green-400 bg-green-950 border-green-800",
-    assessment: "text-blue-400 bg-blue-950 border-blue-800",
-    rejection: "text-red-400 bg-red-950 border-red-800",
-    recruiter_outreach: "text-yellow-400 bg-yellow-950 border-yellow-800",
-    unknown: "text-gray-400 bg-gray-800 border-gray-700",
-  };
-  return colors[classification];
+  return BADGE_TINTS[CLASSIFICATION_TINTS[classification]];
 }
 
 export function getClassificationLabel(classification: EmailClassification): string {

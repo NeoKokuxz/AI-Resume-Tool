@@ -4167,37 +4167,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"resume-app@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "resume-app@workspace:."
-  dependencies:
-    "@dnd-kit/core": "npm:^6.1.0"
-    "@dnd-kit/sortable": "npm:^8.0.0"
-    "@dnd-kit/utilities": "npm:^3.2.2"
-    "@google/generative-ai": "npm:^0.24.1"
-    "@supabase/ssr": "npm:^0.9.0"
-    "@supabase/supabase-js": "npm:^2.99.1"
-    "@types/node": "npm:^20"
-    "@types/react": "npm:^19.2.14"
-    "@types/react-dom": "npm:^19.2.3"
-    autoprefixer: "npm:^10.0.1"
-    clsx: "npm:^2.1.1"
-    eslint: "npm:^8"
-    eslint-config-next: "npm:14.2.5"
-    lucide-react: "npm:^0.408.0"
-    next: "npm:^16.1.6"
-    pdf-lib: "npm:^1.17.1"
-    pdfjs-dist: "npm:^5.5.207"
-    postcss: "npm:^8"
-    react: "npm:^19.2.4"
-    react-dom: "npm:^19.2.4"
-    tailwind-merge: "npm:^2.4.0"
-    tailwindcss: "npm:^3.4.1"
-    typescript: "npm:^5"
-    zustand: "npm:^4.5.4"
-  languageName: unknown
-  linkType: soft
-
 "retry@npm:^0.13.1":
   version: 0.13.1
   resolution: "retry@npm:0.13.1"
@@ -5112,6 +5081,37 @@ __metadata:
   checksum: 10c0/41a5bdd214df2f6c3ecf8622745e4a366c4adced864bc3c833739791aeeeb1838119af7daed4ba36428114b5c67dcda034a79c882e97e43c03e66a4dd7389942
   languageName: node
   linkType: hard
+
+"web@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "web@workspace:."
+  dependencies:
+    "@dnd-kit/core": "npm:^6.1.0"
+    "@dnd-kit/sortable": "npm:^8.0.0"
+    "@dnd-kit/utilities": "npm:^3.2.2"
+    "@google/generative-ai": "npm:^0.24.1"
+    "@supabase/ssr": "npm:^0.9.0"
+    "@supabase/supabase-js": "npm:^2.99.1"
+    "@types/node": "npm:^20"
+    "@types/react": "npm:^19.2.14"
+    "@types/react-dom": "npm:^19.2.3"
+    autoprefixer: "npm:^10.0.1"
+    clsx: "npm:^2.1.1"
+    eslint: "npm:^8"
+    eslint-config-next: "npm:14.2.5"
+    lucide-react: "npm:^0.408.0"
+    next: "npm:^16.1.6"
+    pdf-lib: "npm:^1.17.1"
+    pdfjs-dist: "npm:^5.5.207"
+    postcss: "npm:^8"
+    react: "npm:^19.2.4"
+    react-dom: "npm:^19.2.4"
+    tailwind-merge: "npm:^2.4.0"
+    tailwindcss: "npm:^3.4.1"
+    typescript: "npm:^5"
+    zustand: "npm:^4.5.4"
+  languageName: unknown
+  linkType: soft
 
 "which-boxed-primitive@npm:^1.1.0, which-boxed-primitive@npm:^1.1.1":
   version: 1.1.1

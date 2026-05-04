@@ -5,6 +5,11 @@ const config: Config = {
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    // Utility modules that export Tailwind class strings (e.g.
+    // study-utils.ts exposing badge / section styles) must be scanned too,
+    // otherwise the JIT never emits those classes and they fall back to
+    // currentColor (which renders as near-white in this dark theme).
+    "./src/lib/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {

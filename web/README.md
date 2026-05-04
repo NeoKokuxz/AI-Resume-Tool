@@ -64,7 +64,7 @@ src/
 │           └── topics/route.ts             # GET fixed + AI-suggested topic chips
 ├── components/
 │   ├── ui/                                 # Generic primitives — Button, Badge, Modal, ATSScoreRing, StatTile
-│   ├── layout/Sidebar.tsx                  # Nav with expandable groups (Interview Prep)
+│   ├── layout/Sidebar.tsx                  # Nav with expandable groups (Applications & Jobs, Interview Prep)
 │   ├── applications/                       # ApplicationCard, KanbanColumn, ResumeModal, JobDetailModal
 │   ├── jobs/                                # JobCard, AddJobModal
 │   ├── resume/                             # ResumeUploader, ResumeEditor, ResumeViewer

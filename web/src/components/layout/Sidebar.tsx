@@ -7,6 +7,7 @@ import {
   FileText,
   Briefcase,
   KanbanSquare,
+  ListChecks,
   Mail,
   Bot,
   BookOpen,
@@ -36,8 +37,16 @@ type NavItem = LeafItem | GroupItem;
 const navItems: NavItem[] = [
   { kind: "leaf", href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { kind: "leaf", href: "/resume", label: "My Resume", icon: FileText },
-  { kind: "leaf", href: "/jobs", label: "Job Listings", icon: Briefcase },
-  { kind: "leaf", href: "/applications", label: "Applications", icon: KanbanSquare },
+  {
+    kind: "group",
+    id: "applications",
+    label: "Applications & Jobs",
+    icon: Briefcase,
+    children: [
+      { href: "/applications", label: "Pipeline", icon: KanbanSquare },
+      { href: "/jobs", label: "Job Listings", icon: ListChecks },
+    ],
+  },
   { kind: "leaf", href: "/email", label: "Email Monitor", icon: Mail },
   {
     kind: "group",

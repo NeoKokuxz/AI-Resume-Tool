@@ -1,3 +1,4 @@
+import { BADGE_TINTS, type BadgeTint } from "@/lib/utils";
 import type { StudyDifficulty, StudyLesson, StudyResource } from "@/types";
 
 // Older cached plans store lessons as plain strings.
@@ -20,19 +21,19 @@ export interface DifficultyStyle {
   pillClass: string;
 }
 
+// Hue assignments for each difficulty level. Pill class strings come from
+// the shared BADGE_TINTS map so every badge in the app (kanban, email,
+// difficulty) uses the exact same tint formula.
+const DIFFICULTY_TINTS: Record<StudyDifficulty, BadgeTint> = {
+  beginner: "green",
+  intermediate: "blue",
+  advanced: "purple",
+};
+
 export const DIFFICULTY_STYLES: Record<StudyDifficulty, DifficultyStyle> = {
-  beginner: {
-    label: "Beginner",
-    pillClass: "bg-green-950/60 text-green-400 border-green-800/60",
-  },
-  intermediate: {
-    label: "Intermediate",
-    pillClass: "bg-blue-950/60 text-blue-400 border-blue-800/60",
-  },
-  advanced: {
-    label: "Advanced",
-    pillClass: "bg-purple-950/60 text-purple-400 border-purple-800/60",
-  },
+  beginner: { label: "Beginner", pillClass: BADGE_TINTS[DIFFICULTY_TINTS.beginner] },
+  intermediate: { label: "Intermediate", pillClass: BADGE_TINTS[DIFFICULTY_TINTS.intermediate] },
+  advanced: { label: "Advanced", pillClass: BADGE_TINTS[DIFFICULTY_TINTS.advanced] },
 };
 
 // ─── Section grouping (used by the Study page card layout) ─────────────────

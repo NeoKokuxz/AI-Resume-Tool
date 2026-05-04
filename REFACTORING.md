@@ -119,6 +119,14 @@ export const DIFFICULTY_STYLES: Record<StudyDifficulty, DifficultyStyle> = { ...
 import { DIFFICULTY_STYLES } from "@/lib/study-utils";
 ```
 
+> **Tailwind gotcha:** any path that exports Tailwind class strings must be
+> in `tailwind.config.ts`'s `content` array, otherwise the JIT never compiles
+> those classes and they fall back to `currentColor` — which renders as
+> near-white in this dark theme (a.k.a. "the weird white outline" bug). The
+> current content config covers `src/{app,components,pages,lib}/**`. If you
+> introduce a new top-level folder (e.g. `src/config/`) that exports class
+> strings, add it there too.
+
 ### 5. Component extraction
 
 Pull each named inline component out of a page/big component into its own file.
